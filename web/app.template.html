@@ -1,0 +1,943 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SeedSQL · TextGrad-Guided Text-to-SQL for Community Seed Banks</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f6f4ee; --panel:#ffffff; --ink:#1d2a24; --muted:#5d6b64; --line:#e3dfd3;
+  --green:#1f5c45; --green2:#2f7d5f; --greenbg:#e7f1ec; --saffron:#c9820a; --saffronbg:#fbf1dc;
+  --red:#b3372f; --redbg:#fbe9e7; --blue:#2c5d8f; --bluebg:#e6eef7; --violet:#6a4c93; --violetbg:#efe9f7;
+  --mono:'JetBrains Mono',ui-monospace,monospace; --serif:'Fraunces',Georgia,serif; --sans:'Inter',system-ui,sans-serif;
+  --radius:12px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5}
+a{color:var(--green)}
+header{background:var(--green);color:#fff;padding:18px 28px 0}
+.brand{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.brand h1{font-family:var(--serif);font-weight:700;font-size:26px;margin:0;letter-spacing:.2px}
+.brand .sub{opacity:.85;font-size:14px}
+.status{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+.pill{font-size:12px;padding:4px 10px;border-radius:99px;background:rgba(255,255,255,.14);display:inline-flex;align-items:center;gap:6px}
+.pill .dot{width:8px;height:8px;border-radius:50%;background:#aaa}
+.pill.ok .dot{background:#7be0a8}.pill.bad .dot{background:#ff8a7a}.pill.wait .dot{background:#ffd27a}
+nav{display:flex;gap:4px;margin-top:14px;flex-wrap:wrap}
+nav button{background:transparent;border:0;color:#d6e9df;font:600 14px var(--sans);padding:10px 16px;border-radius:10px 10px 0 0;cursor:pointer}
+nav button.active{background:var(--bg);color:var(--green)}
+main{padding:24px 28px 60px;max-width:1400px;margin:0 auto}
+.view{display:none}.view.active{display:block}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px;margin-bottom:16px}
+.card h2{font-family:var(--serif);font-size:20px;margin:0 0 10px}
+.card h3{font-size:15px;margin:0 0 8px}
+.muted{color:var(--muted)}
+.small{font-size:13px}
+.row{display:flex;gap:16px;flex-wrap:wrap}
+.grow{flex:1;min-width:280px}
+textarea,input[type=text],select{font:inherit;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:#fff;color:var(--ink)}
+textarea{width:100%;min-height:70px;resize:vertical}
+textarea.sql{font-family:var(--mono);font-size:13px;min-height:110px}
+.btn{font:600 14px var(--sans);border:0;border-radius:10px;padding:10px 18px;cursor:pointer;background:var(--green);color:#fff}
+.btn:hover{background:var(--green2)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn.ghost{background:transparent;color:var(--green);border:1px solid var(--green)}
+.btn.warn{background:var(--red)}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+.chip{font-size:13px;border:1px solid var(--line);background:#fbfaf6;border-radius:99px;padding:6px 12px;cursor:pointer}
+.chip:hover{border-color:var(--green);color:var(--green)}
+.controls{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-top:12px}
+.controls label{font-size:13px;color:var(--muted);display:flex;gap:6px;align-items:center}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.seg button{border:0;background:#fff;padding:8px 12px;font:600 13px var(--sans);cursor:pointer;color:var(--muted)}
+.seg button.on{background:var(--green);color:#fff}
+/* pipeline */
+.pipeline{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin:6px 0 4px}
+.stage{border:1px solid var(--line);border-radius:10px;padding:10px;background:#fbfaf6;font-size:12.5px;position:relative;transition:.25s}
+.stage b{display:block;font-size:13px;margin-bottom:2px}
+.stage .n{font:700 11px var(--mono);color:var(--muted)}
+.stage.on{border-color:var(--saffron);background:var(--saffronbg);box-shadow:0 0 0 3px rgba(201,130,10,.15)}
+.stage.done{border-color:var(--green2);background:var(--greenbg)}
+@media (max-width:900px){.pipeline{grid-template-columns:repeat(3,1fr)}}
+/* trace */
+.iter{border:1px solid var(--line);border-radius:12px;margin:12px 0;overflow:hidden;background:#fff}
+.iter-head{display:flex;align-items:center;gap:10px;padding:10px 14px;background:#faf8f2;border-bottom:1px solid var(--line)}
+.iter-head .tag{font:700 12px var(--mono);background:var(--green);color:#fff;border-radius:6px;padding:2px 8px}
+.badge{font:600 12px var(--sans);border-radius:99px;padding:2px 10px}
+.badge.ok{background:var(--greenbg);color:var(--green)}
+.badge.err{background:var(--redbg);color:var(--red)}
+.badge.warn{background:var(--saffronbg);color:#8a5a00}
+.badge.info{background:var(--bluebg);color:var(--blue)}
+.iter-body{display:grid;grid-template-columns:1fr 1fr;gap:0}
+.iter-body>div{padding:12px 14px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);min-width:0}
+.iter-body>div:nth-child(2n){border-right:0}
+@media (max-width:1000px){.iter-body{grid-template-columns:1fr}.iter-body>div{border-right:0}}
+.lbl{font:700 11px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;display:flex;gap:8px;align-items:center}
+.lbl .k{color:#fff;border-radius:5px;padding:1px 6px;font-size:10px}
+.k.fw{background:var(--blue)}.k.ex{background:var(--green)}.k.loss{background:var(--red)}.k.grad{background:var(--violet)}.k.step{background:var(--saffron)}
+pre{margin:0;font:12.5px/1.5 var(--mono);white-space:pre-wrap;word-break:break-word;background:#f7f6f1;border-radius:8px;padding:10px;max-height:320px;overflow:auto}
+pre.sqlc{background:#13261e;color:#d9f2e5}
+pre.err{background:var(--redbg);color:var(--red)}
+.prose{font-size:13.5px;white-space:pre-wrap;max-height:320px;overflow:auto}
+.diff ins{background:#d8f0e2;text-decoration:none}
+.diff del{background:#f8dcd8;color:#8c2a23}
+table.data{border-collapse:collapse;font-size:12.5px;width:100%}
+table.data th,table.data td{border-bottom:1px solid var(--line);padding:5px 8px;text-align:left;white-space:nowrap}
+table.data th{background:#f4f2ea;font-weight:600;position:sticky;top:0}
+.tablewrap{max-height:340px;overflow:auto;border:1px solid var(--line);border-radius:8px}
+.final{border:2px solid var(--green2)}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+@media (max-width:900px){.kpis{grid-template-columns:repeat(2,1fr)}}
+.kpi{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px}
+.kpi .v{font:700 26px var(--serif)}
+.kpi .l{font-size:12.5px;color:var(--muted)}
+.bench td.cell{cursor:pointer;text-align:center;font-weight:600}
+.bench td.cell:hover{outline:2px solid var(--saffron)}
+.c-ok{color:var(--green)}.c-bad{color:var(--red)}.c-run{color:var(--saffron)}.c-exec{color:#8a5a00}
+.tier{font:700 11px var(--mono);border-radius:5px;padding:2px 6px}
+.t1{background:var(--greenbg);color:var(--green)}.t2{background:var(--bluebg);color:var(--blue)}.t3{background:var(--violetbg);color:var(--violet)}
+.charts{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media (max-width:1000px){.charts{grid-template-columns:1fr}}
+.chartbox{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px;height:300px;position:relative}
+.modal-bg{position:fixed;inset:0;background:rgba(20,30,25,.45);display:none;align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto;z-index:20}
+.modal-bg.on{display:flex}
+.modal{background:var(--bg);border-radius:14px;max-width:1150px;width:100%;padding:20px;position:relative}
+.modal .x{position:absolute;right:14px;top:10px;font-size:24px;border:0;background:none;cursor:pointer;color:var(--muted)}
+.notice{background:var(--saffronbg);border:1px solid #efd9a8;border-radius:10px;padding:10px 14px;font-size:13.5px;margin-bottom:14px}
+.notice.red{background:var(--redbg);border-color:#f0c5bf}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media (max-width:1000px){.grid2{grid-template-columns:1fr}}
+.method-map td,.method-map th{white-space:normal;vertical-align:top}
+.progress{height:8px;background:#ebe7da;border-radius:99px;overflow:hidden;margin:8px 0}
+.progress>div{height:100%;background:var(--green2);width:0;transition:width .3s}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:sp .8s linear infinite;vertical-align:-2px}
+@keyframes sp{to{transform:rotate(360deg)}}
+.tbl-list{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+footer{text-align:center;color:var(--muted);font-size:12.5px;padding:20px}
+.hidden{display:none!important}
+.answer{font-size:14.5px;background:var(--greenbg);border-radius:10px;padding:12px 14px;margin-top:10px;white-space:pre-wrap}
+svg text{font-family:var(--sans)}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="16" fill="#2f7d5f"/><path d="M17 27c0-7 0-11 0-14M17 15c-5 0-8-3-8-8 5 0 8 3 8 8zm0 2c4 0 7-2.5 7-7-4 0-7 2.5-7 7z" fill="#e7f1ec" stroke="#e7f1ec" stroke-width="1.2" stroke-linejoin="round"/></svg>
+    <div>
+      <h1>SeedSQL</h1>
+      <div class="sub">TextGrad-guided Text-to-SQL for community seed-bank viability &amp; climate-resilience analytics</div>
+    </div>
+    <div class="status">
+      <span class="pill wait" id="st-db"><span class="dot"></span>SQLite: loading</span>
+      <span class="pill wait" id="st-llm"><span class="dot"></span>LLM: connecting</span>
+    </div>
+  </div>
+  <nav id="nav">
+    <button data-v="ask" class="active">Ask the seed bank</button>
+    <button data-v="bench">Benchmark &amp; evaluation</button>
+    <button data-v="db">Database</button>
+    <button data-v="method">Method</button>
+  </nav>
+</header>
+
+<main>
+<!-- ============================ ASK ============================ -->
+<section class="view active" id="v-ask">
+  <div class="notice red hidden" id="llm-missing">The language model isn't available in this view. Open this page on claude.ai (signed in) and allow it to use Claude when prompted. The Database tab still works without it.</div>
+  <div class="card">
+    <h2>Ask a question in plain language</h2>
+    <div class="chips" id="examples"></div>
+    <textarea id="q" placeholder="e.g. Which seed lots have a most recent germination rate below 75% and need retesting?"></textarea>
+    <div class="controls">
+      <div class="seg" id="method-seg">
+        <button data-m="zero">Zero-shot</button>
+        <button data-m="few">Few-shot</button>
+        <button data-m="selfcorr">Error-retry (ablation)</button>
+        <button data-m="textgrad" class="on">TextGrad</button>
+      </div>
+      <label>Max iterations <input type="number" id="maxit" min="1" max="8" value="4" style="width:60px"></label>
+      <label>Model <select id="tier"><option value="quick">quick</option><option value="default" selected>default</option><option value="complex">complex</option></select></label>
+      <button class="btn" id="run">Run</button>
+      <button class="btn ghost hidden" id="stop">Stop</button>
+      <span class="small muted" id="runinfo"></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>System workflow</h3>
+    <div class="pipeline" id="pipeline">
+      <div class="stage" data-s="1"><span class="n">01</span><b>Question</b>Natural-language input</div>
+      <div class="stage" data-s="2"><span class="n">02</span><b>SQL generation</b>LLM + schema + prompt</div>
+      <div class="stage" data-s="3"><span class="n">03</span><b>Execution</b>Read-only SQLite</div>
+      <div class="stage" data-s="4"><span class="n">04</span><b>Feedback</b>Errors / results → text loss</div>
+      <div class="stage" data-s="5"><span class="n">05</span><b>TextGrad step</b>∇ prompt → update</div>
+      <div class="stage" data-s="6"><span class="n">06</span><b>Retry &amp; evaluate</b>Stop or iterate</div>
+    </div>
+  </div>
+
+  <div id="final" class="card final hidden"></div>
+  <div id="trace"></div>
+</section>
+
+<!-- ============================ BENCH ============================ -->
+<section class="view" id="v-bench">
+  <div class="card">
+    <h2>Controlled benchmark</h2>
+    <p class="muted small" style="margin-top:0">18 curated questions across three complexity tiers: (i) single-table retrieval, (ii) filtering and aggregation, (iii) multi-table joins or combined conditions. Each has a hand-written gold SQL query. <b>Execution accuracy</b> compares the predicted query's result with the gold result: same number of rows, and every gold column matched by a predicted column with the same values (row order and extra columns are ignored). TextGrad never sees the gold query; its loss comes only from execution feedback and an LLM evaluator.</p>
+    <div class="controls">
+      <span class="small muted">Methods:</span>
+      <label><input type="checkbox" class="bm" value="zero" checked> Zero-shot</label>
+      <label><input type="checkbox" class="bm" value="few" checked> Few-shot</label>
+      <label><input type="checkbox" class="bm" value="selfcorr"> Error-retry (ablation)</label>
+      <label><input type="checkbox" class="bm" value="textgrad" checked> TextGrad</label>
+    </div>
+    <div class="controls">
+      <span class="small muted">Tiers:</span>
+      <label><input type="checkbox" class="bt" value="1" checked> Tier 1</label>
+      <label><input type="checkbox" class="bt" value="2" checked> Tier 2</label>
+      <label><input type="checkbox" class="bt" value="3" checked> Tier 3</label>
+      <label>Max iterations <input type="number" id="b-maxit" min="1" max="8" value="4" style="width:60px"></label>
+      <label>Model <select id="b-tier"><option value="quick" selected>quick</option><option value="default">default</option><option value="complex">complex</option></select></label>
+      <label title="Prompt-level optimisation: the prompt optimised on one question is carried into the next, and the optimizer is told to keep its rules general."><input type="checkbox" id="b-carry"> Carry the optimised prompt across questions</label>
+    </div>
+    <div class="controls">
+      <button class="btn" id="b-run">Run benchmark</button>
+      <button class="btn ghost hidden" id="b-stop">Stop</button>
+      <button class="btn ghost" id="b-clear">Clear results</button>
+      <button class="btn ghost" id="b-csv">Copy results CSV</button>
+      <button class="btn ghost" id="b-json">Copy full traces JSON</button>
+      <span class="small muted" id="b-info"></span>
+    </div>
+    <div class="progress"><div id="b-prog"></div></div>
+  </div>
+
+  <div class="kpis" id="kpis"></div>
+  <div class="card" style="margin-top:16px">
+    <h3>Results by method and tier</h3>
+    <div class="tablewrap" style="max-height:none"><table class="data" id="summary"></table></div>
+  </div>
+  <div class="charts">
+    <div class="chartbox"><canvas id="ch-ex"></canvas></div>
+    <div class="chartbox"><canvas id="ch-err"></canvas></div>
+    <div class="chartbox"><canvas id="ch-it"></canvas></div>
+    <div class="chartbox"><canvas id="ch-succ"></canvas></div>
+  </div>
+  <div class="card" style="margin-top:16px">
+    <h3>Per-question outcomes <span class="small muted">— click a cell to inspect its SQL and refinement trace</span></h3>
+    <div class="tablewrap" style="max-height:none"><table class="data bench" id="qtable"></table></div>
+  </div>
+</section>
+
+<!-- ============================ DB ============================ -->
+<section class="view" id="v-db">
+  <div class="grid2">
+    <div class="card">
+      <h2>Schema</h2>
+      <div id="er"></div>
+      <p class="small muted">All records are synthetic (seed 2026), generated for this prototype. They don't describe any real seed bank. Reference date for the data: 2026-11-01.</p>
+    </div>
+    <div class="card">
+      <h2>SQL console <span class="small muted">(read-only)</span></h2>
+      <textarea class="sql" id="console">SELECT v.local_name, l.storage_location, l.quantity
+FROM SeedLot l JOIN SeedVariety v ON v.variety_id = l.variety_id
+ORDER BY l.quantity DESC LIMIT 10;</textarea>
+      <div class="controls"><button class="btn" id="c-run">Execute</button><span class="small muted" id="c-info"></span></div>
+      <div id="c-out" style="margin-top:10px"></div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Browse tables</h2>
+    <div class="tbl-list" id="tbl-list"></div>
+    <div id="tbl-out"></div>
+  </div>
+</section>
+
+<!-- ============================ METHOD ============================ -->
+<section class="view" id="v-method">
+  <div class="card">
+    <h2>How TextGrad is applied here</h2>
+    <p>TextGrad (Yuksekgonul et al., 2024) treats a pipeline of LLM calls like a computation graph. Text <i>variables</i> flow forward; an LLM evaluator produces a textual <i>loss</i>; an LLM writes natural-language <i>gradients</i> (criticism aimed at a specific variable); and a Textual Gradient Descent (TGD) optimizer rewrites the variable. In SeedSQL the optimized variable is the <b>system prompt</b> given to the SQL generator.</p>
+    <div id="graph"></div>
+    <table class="data method-map" style="margin-top:12px">
+      <tr><th>TextGrad concept</th><th>In SeedSQL</th></tr>
+      <tr><td>Variable (requires_grad)</td><td>The generator's system prompt (instructions). Iteration 1 starts from exactly the zero-shot prompt, so any difference from the zero-shot baseline comes only from refinement.</td></tr>
+      <tr><td>Forward pass</td><td>prompt + schema + question → LLM → SQL → SQLite execution (read-only, <code>PRAGMA query_only</code>)</td></tr>
+      <tr><td>Loss</td><td>An LLM evaluator reads the question, SQL and execution feedback (error text, or columns, row count and sample rows) and writes a critique ending in VERDICT: PASS/FAIL. It never sees the gold query.</td></tr>
+      <tr><td>Backward (∂loss/∂prompt)</td><td>An LLM turns the critique into feedback aimed at the prompt variable: what the prompt should say differently.</td></tr>
+      <tr><td>Optimizer step (TGD)</td><td>An LLM rewrites the prompt using that feedback and returns it inside &lt;IMPROVED_VARIABLE&gt; tags.</td></tr>
+      <tr><td>Stopping condition</td><td>The query executes <i>and</i> the evaluator returns PASS, or the iteration limit is reached.</td></tr>
+      <tr><td>Instance vs prompt level</td><td>By default the prompt is optimized per question (instance-level). With "carry the optimised prompt" on, the prompt keeps improving across questions, and the optimizer is told to keep its rules general (prompt-level).</td></tr>
+    </table>
+  </div>
+  <div class="grid2">
+    <div class="card">
+      <h2>Compared approaches</h2>
+      <table class="data method-map">
+        <tr><th>Method</th><th>What it does</th><th>LLM calls</th></tr>
+        <tr><td>Zero-shot</td><td>Instructions + schema + question, one generation.</td><td>1</td></tr>
+        <tr><td>Few-shot</td><td>Same, plus 4 worked question→SQL examples (none of them in the test set).</td><td>1</td></tr>
+        <tr><td>Error-retry (ablation)</td><td>Re-generates with the raw SQLite error appended, until the query executes. No evaluator, no gradients. It shows how much TextGrad adds beyond plain self-correction.</td><td>1–k</td></tr>
+        <tr><td>TextGrad</td><td>Forward → loss → backward → TGD step, repeated.</td><td>2 per success, 4 per refinement</td></tr>
+      </table>
+    </div>
+    <div class="card">
+      <h2>Metrics</h2>
+      <table class="data method-map">
+        <tr><td><b>Execution accuracy</b></td><td>% of questions whose final result matches the gold result.</td></tr>
+        <tr><td><b>Successful query rate</b></td><td>% of questions whose final SQL executes without error.</td></tr>
+        <tr><td><b>Avg. refinement iterations</b></td><td>Mean number of generate→execute passes per question.</td></tr>
+        <tr><td><b>Error reduction</b></td><td>Error categories of first attempts vs final answers (syntax, unknown column/table, ambiguous column, other execution errors, wrong result).</td></tr>
+      </table>
+      <h3 style="margin-top:14px">Assumptions (demo)</h3>
+      <p class="small muted" style="margin:0">Retest threshold 75% germination. Recommended storage: ≤15 °C and ≤50% RH. Viable stock: quantity &gt; 0 and the latest germination ≥ 75%. These thresholds are stated in the questions, not in the prompt.</p>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Scope &amp; limitations</h2>
+    <ul class="small">
+      <li><b>Decision support only:</b> the system summarises records. It doesn't make agricultural decisions.</li>
+      <li><b>Synthetic prototype data:</b> a small controlled database, and results depend on schema quality and data completeness.</li>
+      <li><b>Execution ≠ correctness:</b> a query can run and still be wrong, which is why execution accuracy is checked against gold results.</li>
+      <li><b>Evaluator noise:</b> the LLM loss can reject a correct query (wasting iterations) or accept a wrong one. Benchmark traces show where this happens.</li>
+      <li><b>Results are measured, not assumed:</b> run the benchmark and report what you observe, including where refinement doesn't help.</li>
+    </ul>
+    <p class="small muted">References: Nan et al. (2023), Findings of EMNLP · Mao et al. (2024) DART-SQL, Findings of ACL · Yuksekgonul et al. (2024), TextGrad, arXiv:2406.07496.</p>
+  </div>
+</section>
+</main>
+
+<div class="modal-bg" id="modal"><div class="modal"><button class="x" id="modal-x">×</button><div id="modal-body"></div></div></div>
+<footer>SeedSQL prototype · Capstone Review demo · SQLite runs in your browser (sql.js) · LLM calls go through Claude</footer>
+
+<script id="seed-sql" type="text/plain">__SEED_SQL__</script>
+<script id="bench-json" type="application/json">__BENCH_JSON__</script>
+<script>
+/* ===================================================================== */
+/*  Library loading                                                      */
+/* ===================================================================== */
+function loadScript(srcs){
+  return new Promise((resolve,reject)=>{
+    const tryOne=i=>{
+      if(i>=srcs.length) return reject(new Error('could not load '+srcs[0]));
+      const s=document.createElement('script'); s.src=srcs[i];
+      s.onload=()=>resolve(); s.onerror=()=>{s.remove();tryOne(i+1)};
+      document.head.appendChild(s);
+    };
+    tryOne(0);
+  });
+}
+const BENCH = JSON.parse(document.getElementById('bench-json').textContent);
+const $ = s=>document.querySelector(s), $$ = s=>[...document.querySelectorAll(s)];
+const esc = s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function setPill(id,cls,text){const p=$(id);p.className='pill '+cls;p.innerHTML='<span class="dot"></span>'+text}
+
+let DB=null, SAMPLE=null;
+
+async function initDB(){
+  try{
+    await loadScript([
+      'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/sql-asm.js',
+      'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/sql-asm.js',
+      'https://cdn.jsdelivr.net/npm/sql.js@1.10.3/dist/sql-asm.js',
+      'https://unpkg.com/sql.js@1.10.3/dist/sql-asm.js']);
+    const SQL = await initSqlJs();
+    DB = new SQL.Database();
+    DB.exec(document.getElementById('seed-sql').textContent);
+    DB.exec('PRAGMA query_only = ON;');
+    const n = DB.exec("SELECT (SELECT COUNT(*) FROM SeedLot),(SELECT COUNT(*) FROM StorageLog)")[0].values[0];
+    setPill('#st-db','ok',`SQLite ready · ${n[0]} lots · ${n[1]} storage logs`);
+    BENCH.questions.forEach(q=>{ q.gold = runSQL(q.gold_sql); });
+    renderDB();
+  }catch(e){ setPill('#st-db','bad','SQLite failed to load'); console.error(e); }
+}
+async function initLLM(){
+  // Local mode: page served by `python app.py` -> LLM calls go to the local Python backend
+  if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
+    try{
+      const h = await fetch('/api/health').then(r=>r.json());
+      SAMPLE = async (prompt, opts={})=>{
+        const r = await fetch('/api/llm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt}),signal:opts.signal});
+        const j = await r.json();
+        if(!r.ok) throw Object.assign(new Error(j.error||('HTTP '+r.status)),{code: r.status===429?'rate_limited':'error'});
+        return {text:j.text};
+      };
+      setPill('#st-llm','ok',`LLM: ${h.provider} · ${h.model}`);
+      $$('#tier,#b-tier').forEach(s=>{s.disabled=true; s.title='Model is chosen when starting app.py';});
+      return;
+    }catch(e){ setPill('#st-llm','bad','LLM backend not reachable'); $('#llm-missing').classList.remove('hidden'); $('#llm-missing').textContent='Start the app with: python app.py --provider groq'; return; }
+  }
+  try{
+    for(let i=0;i<40 && !(window.claude && window.claude.use);i++) await sleep(250);
+    SAMPLE = window.claude && window.claude.use ? await window.claude.use('sample') : null;
+  }catch(e){ SAMPLE=null; }
+  if(SAMPLE){ setPill('#st-llm','ok','LLM: Claude connected'); }
+  else { setPill('#st-llm','bad','LLM unavailable'); $('#llm-missing').classList.remove('hidden'); }
+}
+
+/* ===================================================================== */
+/*  SQL execution (read-only)                                            */
+/* ===================================================================== */
+function runSQL(sql){
+  const t0=performance.now();
+  const s=(sql||'').trim();
+  if(!s) return {ok:false,error:'Empty query',ms:0};
+  if(!/^\s*(with|select)\b/i.test(s.replace(/^(\s*--[^\n]*\n)+/,''))) return {ok:false,error:'Only read-only SELECT/WITH queries are permitted.',ms:0};
+  try{
+    const res = DB.exec(s);
+    const last = res.length? res[res.length-1] : {columns:[],values:[]};
+    return {ok:true,columns:last.columns,values:last.values,ms:performance.now()-t0};
+  }catch(e){ return {ok:false,error:String(e.message||e),ms:performance.now()-t0}; }
+}
+function extractSQL(text){
+  let t=String(text||'');
+  const m=t.match(/```(?:sql|sqlite)?\s*([\s\S]*?)```/i);
+  if(m) t=m[1];
+  t=t.replace(/^\s*(sql|query)\s*:\s*/i,'').trim();
+  const start=t.search(/\b(with|select)\b/i); if(start>0) t=t.slice(start);
+  return t.trim();
+}
+function tableHTML(r,limit=200){
+  if(!r||!r.ok) return '';
+  if(!r.columns.length) return '<div class="small muted">No result set.</div>';
+  const rows=r.values.slice(0,limit);
+  return `<div class="tablewrap"><table class="data"><tr>${r.columns.map(c=>`<th>${esc(c)}</th>`).join('')}</tr>${rows.map(row=>`<tr>${row.map(v=>`<td>${esc(fmt(v))}</td>`).join('')}</tr>`).join('')}</table></div>${r.values.length>limit?`<div class="small muted">Showing ${limit} of ${r.values.length} rows</div>`:''}`;
+}
+function fmt(v){ if(typeof v==='number' && !Number.isInteger(v)) return Math.round(v*100)/100; return v===null?'NULL':v; }
+
+/* ===================================================================== */
+/*  Execution accuracy (relaxed result matching)                          */
+/* ===================================================================== */
+function norm(v){
+  if(v===null||v===undefined) return 'NULL';
+  if(typeof v==='string'){ const t=v.trim(); if(t!=='' && !isNaN(Number(t))) v=Number(t); else return 's:'+t.toLowerCase(); }
+  if(typeof v==='number') return 'n:'+(Math.round(v*100)/100).toFixed(2);
+  return 's:'+String(v);
+}
+function resultsMatch(gold,pred){
+  if(!gold||!gold.ok||!pred||!pred.ok) return false;
+  if(gold.values.length!==pred.values.length) return false;
+  if(gold.values.length===0) return true;
+  const gc=gold.columns.length, pc=pred.columns.length;
+  const colSig=(r,j)=>r.values.map(row=>norm(row[j])).sort().join('|');
+  const gs=[...Array(gc).keys()].map(j=>colSig(gold,j));
+  const ps=[...Array(pc).keys()].map(j=>colSig(pred,j));
+  // try all consistent mappings (backtracking) and check row-tuple multiset equality
+  const tupleSet=(r,cols)=>r.values.map(row=>cols.map(j=>norm(row[j])).join('§')).sort().join('¶');
+  const goldTuples=tupleSet(gold,[...Array(gc).keys()]);
+  const used=new Array(pc).fill(false), map=[];
+  const bt=j=>{
+    if(j===gc) return tupleSet(pred,map)===goldTuples;
+    for(let i=0;i<pc;i++){ if(!used[i]&&ps[i]===gs[j]){ used[i]=true; map.push(i); if(bt(j+1)) return true; map.pop(); used[i]=false; } }
+    return false;
+  };
+  return bt(0);
+}
+function errorCategory(r, correct){
+  if(!r) return 'No SQL';
+  if(!r.ok){
+    const e=r.error.toLowerCase();
+    if(e.includes('only read-only')||e.includes('empty query')) return 'Invalid / non-SELECT';
+    if(e.includes('syntax error')||e.includes('incomplete input')||e.includes('unrecognized token')) return 'Syntax error';
+    if(e.includes('no such column')) return 'Unknown column';
+    if(e.includes('no such table')) return 'Unknown table';
+    if(e.includes('ambiguous column')) return 'Ambiguous column';
+    if(e.includes('misuse of aggregate')||e.includes('group by')) return 'Aggregation misuse';
+    return 'Other execution error';
+  }
+  if(correct===false) return r.values.length===0 ? 'Wrong result (empty)' : 'Wrong result';
+  return null;
+}
+
+/* ===================================================================== */
+/*  Prompts                                                               */
+/* ===================================================================== */
+const SCHEMA_TEXT = `SeedVariety(variety_id INTEGER PK, crop_name TEXT, local_name TEXT, crop_type TEXT, drought_tolerance TEXT)
+  -- crop_type values: 'Millet','Cereal','Pulse','Vegetable','Oilseed'
+  -- drought_tolerance values: 'High','Medium','Low'
+SeedLot(lot_id INTEGER PK, variety_id INTEGER FK->SeedVariety.variety_id, storage_location TEXT, quantity INTEGER, collection_date TEXT)
+  -- storage_location values: 'Cold Room A','Cold Room B','Clay Pot Store','Ambient Shelf','Village Hub - Mandya'
+  -- quantity = grams currently in stock (0 means exhausted)
+GerminationTest(test_id INTEGER PK, lot_id INTEGER FK->SeedLot.lot_id, test_date TEXT, germination_rate REAL)
+  -- germination_rate is a percentage 0-100; a lot can have several tests over time
+StorageLog(log_id INTEGER PK, lot_id INTEGER FK->SeedLot.lot_id, recorded_date TEXT, temperature REAL, humidity REAL)
+  -- monthly readings; temperature in deg C, humidity in % relative humidity
+Distribution(distribution_id INTEGER PK, lot_id INTEGER FK->SeedLot.lot_id, destination TEXT, quantity INTEGER, date TEXT)
+  -- seed given out to farmer groups; quantity in grams
+Notes: all dates are TEXT 'YYYY-MM-DD'. The database engine is SQLite. Today's date is 2026-11-01.`;
+
+const BASE_INSTRUCTIONS = `You are an expert assistant that translates questions about a community seed-bank database into a single correct SQLite query. Use only the tables and columns in the schema. Return only the SQL query.`;
+
+function generatorPrompt(instructions, question, fewShot){
+  let p = `${instructions}\n\n### Database schema (SQLite)\n${SCHEMA_TEXT}\n`;
+  if(fewShot){
+    p += `\n### Examples\n` + BENCH.few_shot_examples.map(e=>`Question: ${e.question}\nSQL: ${e.sql}`).join('\n\n') + '\n';
+  }
+  p += `\n### Question\n${question}\n\nRespond with only the SQL query inside a \`\`\`sql code block.`;
+  return p;
+}
+function feedbackText(r){
+  if(!r) return 'No SQL was produced.';
+  if(!r.ok) return `status: ERROR\nerror message: ${r.error}`;
+  const head = r.values.slice(0,8).map(row=>row.map(fmt).join(' | ')).join('\n');
+  return `status: executed successfully\ncolumns: ${r.columns.join(', ')}\nrow count: ${r.values.length}\nfirst rows:\n${head||'(no rows)'}`;
+}
+function lossPrompt(question, sql, r){
+  return `You are a strict reviewer of SQL queries written by a Text-to-SQL system for a community seed-bank database. You do NOT have a reference answer; judge using the question, the schema, the SQL and the execution feedback.
+
+<SCHEMA>
+${SCHEMA_TEXT}
+</SCHEMA>
+
+<QUESTION>
+${question}
+</QUESTION>
+
+<SQL>
+${sql}
+</SQL>
+
+<EXECUTION_FEEDBACK>
+${feedbackText(r)}
+</EXECUTION_FEEDBACK>
+
+Check: (1) it executes; (2) correct tables and join keys; (3) every condition in the question is applied with the exact stored values, thresholds and date ranges; (4) aggregation, GROUP BY and HAVING are correct; (5) "most recent / latest" logic is computed per lot where required; (6) the returned columns are what the question asks for; (7) the result is plausible (an empty result often signals a wrong filter value).
+List concrete problems as short bullets, or write "No problems found."
+The final line must be exactly "VERDICT: PASS" or "VERDICT: FAIL".`;
+}
+function gradientPrompt(instructions, question, sql, r, loss){
+  return `You are part of an optimization system that improves a text variable by computing textual gradients: precise, critical feedback about how the variable should change.
+
+The variable is the SYSTEM PROMPT given to a language model that writes SQLite queries for a seed-bank database.
+<VARIABLE>
+${instructions}
+</VARIABLE>
+
+It was used in this computation:
+<QUESTION>
+${question}
+</QUESTION>
+<GENERATED_SQL>
+${sql}
+</GENERATED_SQL>
+<EXECUTION_FEEDBACK>
+${feedbackText(r)}
+</EXECUTION_FEEDBACK>
+
+The evaluator (loss function) produced this critique:
+<LOSS>
+${loss}
+</LOSS>
+
+Explain how the VARIABLE should be changed so that the model writes a correct query next time. Be specific and actionable: you may name tables, join keys, filter values and SQL patterns the prompt should emphasise. Do not rewrite the variable yourself; give the feedback only, as at most 6 bullets.`;
+}
+function stepPrompt(instructions, gradient, carry){
+  const scope = carry
+    ? `The improved prompt will be reused for OTHER questions about the same database, so express the lessons as general, reusable rules. Do not mention this particular question.`
+    : `The improved prompt will be used again for the same question, so it may include guidance specific to this question.`;
+  return `You are part of an optimization system that improves text (a variable) using textual gradient descent.
+
+Variable role: system prompt for a Text-to-SQL language model working on a community seed-bank SQLite database.
+<VARIABLE>
+${instructions}
+</VARIABLE>
+
+Feedback (gradient) on the variable:
+<FEEDBACK>
+${gradient}
+</FEEDBACK>
+
+${scope}
+Keep everything in the current variable that is still useful, address the feedback, and keep it under 250 words. Do not include the database schema; it is supplied separately.
+Respond with the improved variable only, between <IMPROVED_VARIABLE> and </IMPROVED_VARIABLE>.`;
+}
+function retryPrompt(question, prevSQL, r){
+  return generatorPrompt(BASE_INSTRUCTIONS, question, false) +
+    `\n\nYour previous query was:\n\`\`\`sql\n${prevSQL}\n\`\`\`\nIt failed with this SQLite error: ${r? r.error : 'no SQL produced'}\nWrite a corrected query.`;
+}
+
+/* ===================================================================== */
+/*  LLM wrapper                                                           */
+/* ===================================================================== */
+let CALLS=0;
+async function llm(prompt, tier, signal){
+  if(!SAMPLE) throw new Error('LLM unavailable in this view.');
+  for(let attempt=0; attempt<4; attempt++){
+    if(signal&&signal.aborted) throw new Error('Stopped');
+    try{
+      CALLS++;
+      const r = await SAMPLE(prompt, {modelTier:tier, cache:false, signal});
+      return r.text||'';
+    }catch(e){
+      if(e && e.code==='rate_limited' && attempt<3){ await sleep(8000*(attempt+1)); continue; }
+      if(e && e.code==='not_granted') throw new Error('Permission to use Claude was not granted.');
+      throw e;
+    }
+  }
+}
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+
+/* ===================================================================== */
+/*  Methods                                                               */
+/* ===================================================================== */
+// hooks: {onIter(iterObj), onStage(n)}
+async function runMethod(method, question, opts, hooks={}){
+  const {tier='default', maxIt=4, signal, initialInstructions=BASE_INSTRUCTIONS, carry=false} = opts;
+  const stage=n=>hooks.onStage&&hooks.onStage(n);
+  const out={method, question, iterations:[], calls0:CALLS};
+  if(method==='zero'||method==='few'){
+    stage(2);
+    const prompt = generatorPrompt(BASE_INSTRUCTIONS, question, method==='few');
+    const raw = await llm(prompt, tier, signal);
+    const sql = extractSQL(raw); stage(3);
+    const res = runSQL(sql);
+    const it={k:1, prompt:BASE_INSTRUCTIONS, sql, res}; out.iterations.push(it); hooks.onIter&&hooks.onIter(it);
+  }
+  else if(method==='selfcorr'){
+    let prevSQL=null, prevRes=null;
+    for(let k=1;k<=maxIt;k++){
+      stage(2);
+      const prompt = k===1 ? generatorPrompt(BASE_INSTRUCTIONS, question, false) : retryPrompt(question, prevSQL, prevRes);
+      const sql = extractSQL(await llm(prompt, tier, signal)); stage(3);
+      const res = runSQL(sql);
+      const it={k, prompt: k===1?BASE_INSTRUCTIONS:'(previous SQL + raw error appended)', sql, res};
+      if(!res.ok) { stage(4); it.loss='Execution error fed back verbatim: '+res.error; }
+      out.iterations.push(it); hooks.onIter&&hooks.onIter(it);
+      if(res.ok) break;
+      prevSQL=sql; prevRes=res;
+    }
+  }
+  else if(method==='textgrad'){
+    let instructions = initialInstructions;
+    for(let k=1;k<=maxIt;k++){
+      stage(2);
+      const sql = extractSQL(await llm(generatorPrompt(instructions, question, false), tier, signal)); stage(3);
+      const res = runSQL(sql);
+      const it={k, prompt:instructions, sql, res};
+      stage(4);
+      const loss = await llm(lossPrompt(question, sql, res), tier, signal);
+      it.loss = loss;
+      const pass = res.ok && /VERDICT:\s*PASS/i.test(loss) && !/VERDICT:\s*FAIL/i.test(loss);
+      it.verdict = pass?'PASS':'FAIL';
+      if(pass || k===maxIt){ out.iterations.push(it); hooks.onIter&&hooks.onIter(it); break; }
+      stage(5);
+      it.gradient = await llm(gradientPrompt(instructions, question, sql, res, loss), tier, signal);
+      const stepRaw = await llm(stepPrompt(instructions, it.gradient, carry), tier, signal);
+      const m = stepRaw.match(/<IMPROVED_VARIABLE>([\s\S]*?)<\/IMPROVED_VARIABLE>/i);
+      it.newPrompt = (m? m[1] : stepRaw).trim();
+      instructions = it.newPrompt;
+      out.iterations.push(it); hooks.onIter&&hooks.onIter(it);
+      stage(6);
+    }
+    out.finalInstructions = instructions;
+  }
+  out.final = out.iterations[out.iterations.length-1];
+  out.calls = CALLS - out.calls0;
+  return out;
+}
+
+/* ===================================================================== */
+/*  Ask view                                                              */
+/* ===================================================================== */
+const EXAMPLES = [
+  'Which seed lots have a most recent germination rate below 75% and need retesting?',
+  'Which highly drought-tolerant varieties have viable stock available (quantity above zero and latest germination at least 75%)?',
+  'Which seed lots have been stored outside recommended conditions (above 15 C or above 50% humidity) for the longest time?',
+  'Summarize available seed lots by variety and storage location.',
+  'Which varieties have low recent germination results (below 75% since 2025) and no retest recorded?',
+];
+let METHOD='textgrad', abortCtl=null;
+$('#examples').innerHTML = EXAMPLES.map(e=>`<span class="chip">${esc(e)}</span>`).join('');
+$$('#examples .chip').forEach(c=>c.onclick=()=>{$('#q').value=c.textContent});
+$$('#method-seg button').forEach(b=>b.onclick=()=>{ $$('#method-seg button').forEach(x=>x.classList.remove('on')); b.classList.add('on'); METHOD=b.dataset.m; $('#maxit').disabled = (METHOD==='zero'||METHOD==='few'); });
+$$('#nav button').forEach(b=>b.onclick=()=>showView(b.dataset.v));
+function showView(v){ $$('#nav button').forEach(x=>x.classList.toggle('active',x.dataset.v===v)); $$('.view').forEach(x=>x.classList.toggle('active',x.id==='v-'+v)); try{history.replaceState(null,'','#'+v)}catch(e){} if(v==='bench') drawCharts(); }
+const initialView = (location.hash||'').slice(1); if(['ask','bench','db','method'].includes(initialView)) showView(initialView);
+
+function setStage(n){ $$('#pipeline .stage').forEach(s=>{ const k=+s.dataset.s; s.classList.toggle('on',k===n); if(k<n) s.classList.add('done'); }); }
+function resetStages(){ $$('#pipeline .stage').forEach(s=>s.classList.remove('on','done')); }
+
+function wordDiff(a,b){
+  const A=a.split(/(\s+)/), B=b.split(/(\s+)/);
+  if(A.length*B.length>400000) return esc(b);
+  const n=A.length,m=B.length, dp=Array.from({length:n+1},()=>new Uint16Array(m+1));
+  for(let i=n-1;i>=0;i--) for(let j=m-1;j>=0;j--) dp[i][j]= A[i]===B[j]? dp[i+1][j+1]+1 : Math.max(dp[i+1][j],dp[i][j+1]);
+  let i=0,j=0,out='';
+  while(i<n&&j<m){ if(A[i]===B[j]){out+=esc(A[i]);i++;j++;} else if(dp[i+1][j]>=dp[i][j+1]){ out+= A[i].trim()?`<del>${esc(A[i])}</del>`:esc(A[i]); i++; } else { out+= `<ins>${esc(B[j])}</ins>`; j++; } }
+  while(i<n){ out+= A[i].trim()?`<del>${esc(A[i])}</del>`:''; i++; } while(j<m){ out+=`<ins>${esc(B[j])}</ins>`; j++; }
+  return out;
+}
+function iterHTML(it, method){
+  const execBadge = it.res.ok ? `<span class="badge ok">executed · ${it.res._rows ?? it.res.values.length} rows</span>` : `<span class="badge err">execution error</span>`;
+  const verdict = it.verdict ? `<span class="badge ${it.verdict==='PASS'?'ok':'warn'}">loss verdict: ${it.verdict}</span>` : '';
+  const exec = it.res.ok ? tableHTML(it.res,50) : `<pre class="err">${esc(it.res.error)}</pre>`;
+  let cells = `
+    <div><div class="lbl"><span class="k fw">forward</span>Generated SQL</div><pre class="sqlc">${esc(it.sql||'(none)')}</pre></div>
+    <div><div class="lbl"><span class="k ex">execute</span>Database result</div>${exec}</div>`;
+  if(it.loss) cells += `<div><div class="lbl"><span class="k loss">loss</span>${method==='textgrad'?'Evaluator critique':'Feedback'}</div><div class="prose">${esc(it.loss)}</div></div>`;
+  if(it.gradient) cells += `<div><div class="lbl"><span class="k grad">∇ gradient</span>Feedback on the prompt variable</div><div class="prose">${esc(it.gradient)}</div></div>`;
+  if(it.newPrompt) cells += `<div style="grid-column:1/-1"><div class="lbl"><span class="k step">TGD step</span>Prompt update (green = added, red = removed)</div><div class="prose diff">${wordDiff(it.prompt,it.newPrompt)}</div></div>`;
+  else if(method==='textgrad' && it.k===1) cells += `<div style="grid-column:1/-1"><div class="lbl">Prompt variable used</div><div class="prose">${esc(it.prompt)}</div></div>`;
+  return `<div class="iter"><div class="iter-head"><span class="tag">ITERATION ${it.k}</span>${execBadge}${verdict}</div><div class="iter-body">${cells}</div></div>`;
+}
+
+$('#run').onclick = async ()=>{
+  const q=$('#q').value.trim(); if(!q){ $('#q').focus(); return; }
+  if(!DB){ alertMsg('Database not loaded yet.'); return; }
+  $('#trace').innerHTML=''; $('#final').classList.add('hidden'); resetStages(); setStage(1);
+  $('#run').disabled=true; $('#stop').classList.remove('hidden');
+  abortCtl=new AbortController();
+  const t0=performance.now();
+  const timer=setInterval(()=>{$('#runinfo').innerHTML=`<span class="spin"></span> running… ${((performance.now()-t0)/1000).toFixed(0)}s`},500);
+  try{
+    const out = await runMethod(METHOD, q, {tier:$('#tier').value, maxIt:+$('#maxit').value||4, signal:abortCtl.signal},
+      {onStage:setStage, onIter:it=>{ $('#trace').insertAdjacentHTML('beforeend', iterHTML(it, METHOD)); }});
+    $$('#pipeline .stage').forEach(s=>{s.classList.remove('on');s.classList.add('done')});
+    const f=out.final, secs=((performance.now()-t0)/1000).toFixed(1);
+    const label={zero:'Zero-shot',few:'Few-shot',selfcorr:'Error-retry',textgrad:'TextGrad'}[METHOD];
+    $('#final').innerHTML = `<h2>Answer <span class="small muted">· ${label} · ${out.iterations.length} iteration(s) · ${out.calls} LLM calls · ${secs}s</span></h2>
+      ${f.res.ok? tableHTML(f.res) : `<pre class="err">${esc(f.res.error)}</pre>`}
+      <details style="margin-top:10px"><summary class="small">Final SQL</summary><pre class="sqlc">${esc(f.sql)}</pre></details>
+      ${f.res.ok? `<div class="controls"><button class="btn ghost" id="summ">Explain this result for a seed-bank coordinator</button></div><div id="summ-out"></div>`:''}
+      <p class="small muted" style="margin-bottom:0">Decision support only: these rows summarise records and should be checked before acting.</p>`;
+    $('#final').classList.remove('hidden');
+    $('#final').scrollIntoView({behavior:'smooth',block:'start'});
+    const sb=$('#summ'); if(sb) sb.onclick=async()=>{
+      sb.disabled=true; $('#summ-out').innerHTML='<span class="spin"></span>';
+      try{
+        const txt = await llm(`A seed-bank coordinator asked: "${q}".\nThe database returned:\n${feedbackText(f.res)}\nIn 2-4 plain sentences, summarise what this result means for them. Mention specific lots or varieties where useful. Don't invent data beyond what is shown; if more rows exist than shown, say so.`, $('#tier').value);
+        $('#summ-out').innerHTML=`<div class="answer">${esc(txt)}</div>`;
+      }catch(e){ $('#summ-out').innerHTML=`<div class="notice red">${esc(e.message)}</div>`; }
+    };
+  }catch(e){
+    $('#trace').insertAdjacentHTML('afterbegin', `<div class="notice red">${esc(e.message||e)}</div>`);
+  }finally{
+    clearInterval(timer); $('#runinfo').textContent=''; $('#run').disabled=false; $('#stop').classList.add('hidden');
+  }
+};
+$('#stop').onclick=()=>abortCtl&&abortCtl.abort();
+function alertMsg(m){ $('#trace').innerHTML=`<div class="notice red">${esc(m)}</div>`; }
+
+/* ===================================================================== */
+/*  Benchmark                                                             */
+/* ===================================================================== */
+const METHODS=['zero','few','selfcorr','textgrad'];
+const MLABEL={zero:'Zero-shot',few:'Few-shot',selfcorr:'Error-retry',textgrad:'TextGrad'};
+const MCOLOR={zero:'#9aa5a0',few:'#2c5d8f',selfcorr:'#c9820a',textgrad:'#1f5c45'};
+let RESULTS={}; // key `${qid}|${method}` -> record
+try{ RESULTS = JSON.parse(localStorage.getItem('seedsql-results')||'{}') }catch(e){ RESULTS={} }
+function saveResults(){ try{ localStorage.setItem('seedsql-results', JSON.stringify(RESULTS)) }catch(e){} }
+let benchAbort=null, RUNNING=new Set();
+
+function record(q, out){
+  const iters = out.iterations.map(it=>({k:it.k, prompt:it.prompt, sql:it.sql, ok:it.res.ok, error:it.res.ok?null:it.res.error,
+    rows:it.res.ok?it.res.values.length:null, columns:it.res.ok?it.res.columns:null, preview:it.res.ok?it.res.values.slice(0,20):null,
+    correct: resultsMatch(q.gold,it.res), loss:it.loss||null, verdict:it.verdict||null, gradient:it.gradient||null, newPrompt:it.newPrompt||null}));
+  const first=out.iterations[0].res, fin=out.final.res;
+  const firstCorrect = resultsMatch(q.gold, first), finCorrect = resultsMatch(q.gold, fin);
+  return { qid:q.id, tier:q.tier, method:out.method, question:q.question,
+    executed: fin.ok, correct: finCorrect, firstExecuted:first.ok, firstCorrect,
+    iterations: out.iterations.length, calls: out.calls,
+    firstError: errorCategory(first, firstCorrect), finalError: errorCategory(fin, finCorrect),
+    finalSQL: out.final.sql, iters, finalInstructions: out.finalInstructions||null, ts: Date.now() };
+}
+
+$('#b-run').onclick = async ()=>{
+  if(!SAMPLE){ $('#b-info').textContent='LLM unavailable in this view.'; return; }
+  const methods=$$('.bm:checked').map(x=>x.value), tiers=$$('.bt:checked').map(x=>+x.value);
+  const qs=BENCH.questions.filter(q=>tiers.includes(q.tier));
+  const tier=$('#b-tier').value, maxIt=+$('#b-maxit').value||4, carry=$('#b-carry').checked;
+  const jobs=[]; methods.forEach(m=>qs.forEach(q=>jobs.push([q,m])));
+  if(!jobs.length) return;
+  benchAbort=new AbortController();
+  $('#b-run').disabled=true; $('#b-stop').classList.remove('hidden');
+  let done=0, carried=BASE_INSTRUCTIONS;
+  const t0=performance.now();
+  for(const [q,m] of jobs){
+    if(benchAbort.signal.aborted) break;
+    const key=q.id+'|'+m; RUNNING.add(key); renderQTable();
+    $('#b-info').innerHTML=`<span class="spin"></span> ${MLABEL[m]} · ${q.id} (${done+1}/${jobs.length}) · ${((performance.now()-t0)/1000).toFixed(0)}s`;
+    try{
+      const out = await runMethod(m, q.question, {tier, maxIt, signal:benchAbort.signal, carry, initialInstructions: (m==='textgrad'&&carry)? carried : BASE_INSTRUCTIONS});
+      if(m==='textgrad'&&carry&&out.finalInstructions) carried=out.finalInstructions;
+      RESULTS[key]=Object.assign(record(q,out),{modelTier:tier,maxIt,carry});
+      saveResults();
+    }catch(e){
+      if(String(e.message)==='Stopped' || benchAbort.signal.aborted){ RUNNING.delete(key); break; }
+      RESULTS[key]={qid:q.id,tier:q.tier,method:m,question:q.question,failed:String(e.message||e),ts:Date.now()};
+      if(/not granted/i.test(e.message)){ RUNNING.delete(key); renderBench(); break; }
+    }
+    RUNNING.delete(key); done++;
+    $('#b-prog').style.width=(100*done/jobs.length)+'%';
+    renderBench();
+  }
+  $('#b-info').textContent = `Finished ${done}/${jobs.length} runs in ${((performance.now()-t0)/1000).toFixed(0)}s.`;
+  $('#b-run').disabled=false; $('#b-stop').classList.add('hidden');
+};
+$('#b-stop').onclick=()=>benchAbort&&benchAbort.abort();
+$('#b-clear').onclick=()=>{ RESULTS={}; saveResults(); $('#b-prog').style.width='0'; renderBench(); };
+
+function stats(filterFn){
+  const out={};
+  METHODS.forEach(m=>{
+    const rs=Object.values(RESULTS).filter(r=>r.method===m && !r.failed && filterFn(r));
+    if(!rs.length) return;
+    const n=rs.length, pct=x=>100*x/n;
+    out[m]={n, ex:pct(rs.filter(r=>r.correct).length), succ:pct(rs.filter(r=>r.executed).length),
+      it: rs.reduce((a,r)=>a+r.iterations,0)/n, calls: rs.reduce((a,r)=>a+(r.calls||0),0)/n,
+      firstEx:pct(rs.filter(r=>r.firstCorrect).length),
+      firstErrs: rs.filter(r=>r.firstError).length, finalErrs: rs.filter(r=>r.finalError).length};
+  });
+  return out;
+}
+function renderBench(){ renderKPIs(); renderSummary(); renderQTable(); drawCharts(); }
+function renderKPIs(){
+  const s=stats(()=>true);
+  const tg=s.textgrad, best=['zero','few'].map(m=>s[m]).filter(Boolean);
+  const total=Object.values(RESULTS).filter(r=>!r.failed).length;
+  const k=(v,l)=>`<div class="kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`;
+  if(!total){ $('#kpis').innerHTML = k('—','Execution accuracy · TextGrad')+k('—','Best static baseline')+k('—','Avg. iterations · TextGrad')+k('0','Runs recorded'); return; }
+  const bestBase = best.length? Math.max(...best.map(x=>x.ex)) : null;
+  $('#kpis').innerHTML =
+    k(tg? tg.ex.toFixed(1)+'%' : '—', 'Execution accuracy · TextGrad') +
+    k(bestBase!==null? bestBase.toFixed(1)+'%' : '—', 'Best static baseline (zero/few-shot)') +
+    k(tg? tg.it.toFixed(2) : '—', 'Avg. refinement iterations · TextGrad') +
+    k(total, 'Runs recorded');
+}
+function renderSummary(){
+  let h=`<tr><th>Method</th><th>Tier</th><th>n</th><th>Execution accuracy</th><th>Successful query rate</th><th>Avg. iterations</th><th>Avg. LLM calls</th><th>First-attempt accuracy</th><th>Errors: first → final</th></tr>`;
+  let any=false;
+  METHODS.forEach(m=>{
+    [0,1,2,3].forEach(t=>{
+      const s=stats(r=>t===0||r.tier===t)[m]; if(!s) return; any=true;
+      h+=`<tr style="${t===0?'font-weight:700;background:#faf8f2':''}"><td>${MLABEL[m]}</td><td>${t===0?'All':'Tier '+t}</td><td>${s.n}</td><td>${s.ex.toFixed(1)}%</td><td>${s.succ.toFixed(1)}%</td><td>${s.it.toFixed(2)}</td><td>${s.calls.toFixed(1)}</td><td>${s.firstEx.toFixed(1)}%</td><td>${s.firstErrs} → ${s.finalErrs}</td></tr>`;
+    });
+  });
+  $('#summary').innerHTML = any? h : '<tr><td class="muted">No results yet. Choose methods and tiers above, then run the benchmark.</td></tr>';
+}
+function renderQTable(){
+  let h=`<tr><th>ID</th><th>Tier</th><th style="white-space:normal">Question</th>${METHODS.map(m=>`<th style="text-align:center">${MLABEL[m]}</th>`).join('')}<th>Gold rows</th></tr>`;
+  BENCH.questions.forEach(q=>{
+    h+=`<tr><td><b>${q.id}</b></td><td><span class="tier t${q.tier}">T${q.tier}</span></td><td style="white-space:normal;min-width:320px">${esc(q.question)}</td>`;
+    METHODS.forEach(m=>{
+      const key=q.id+'|'+m, r=RESULTS[key];
+      let c='<span class="muted">·</span>';
+      if(RUNNING.has(key)) c='<span class="c-run spin"></span>';
+      else if(r&&r.failed) c=`<span class="c-bad" title="${esc(r.failed)}">!</span>`;
+      else if(r) c = r.correct? `<span class="c-ok">✓</span>` : (r.executed? `<span class="c-exec">✗</span>`:`<span class="c-bad">✗ err</span>`);
+      if(r&&!r.failed&&r.iterations>1) c+=` <span class="small muted">${r.iterations}it</span>`;
+      h+=`<td class="cell" data-key="${key}">${c}</td>`;
+    });
+    h+=`<td class="cell" data-gold="${q.id}">${q.gold&&q.gold.ok? q.gold.values.length : '?'}</td></tr>`;
+  });
+  $('#qtable').innerHTML=h;
+  $$('#qtable td[data-key]').forEach(td=>td.onclick=()=>openRecord(td.dataset.key));
+  $$('#qtable td[data-gold]').forEach(td=>td.onclick=()=>openGold(td.dataset.gold));
+}
+function openGold(id){
+  const q=BENCH.questions.find(x=>x.id===id);
+  openModal(`<h2 style="font-family:var(--serif)">${q.id} · gold reference</h2><p>${esc(q.question)}</p><pre class="sqlc">${esc(q.gold_sql)}</pre><div style="margin-top:10px">${tableHTML(q.gold)}</div>`);
+}
+function openRecord(key){
+  const r=RESULTS[key]; const q=BENCH.questions.find(x=>x.id===key.split('|')[0]);
+  if(!r){ openGold(q.id); return; }
+  if(r.failed){ openModal(`<h2>${esc(key)}</h2><div class="notice red">${esc(r.failed)}</div>`); return; }
+  const iters=r.iters.map(it=>iterHTML({k:it.k,prompt:it.prompt,sql:it.sql,loss:it.loss,verdict:it.verdict,gradient:it.gradient,newPrompt:it.newPrompt,
+    res: it.ok? {ok:true,columns:it.columns,values:it.preview,_rows:it.rows} : {ok:false,error:it.error}}, r.method)
+    .replace('<span class="tag">', `<span class="badge ${it.correct?'ok':'err'}">${it.correct?'matches gold':'does not match gold'}</span><span class="tag">`)).join('');
+  openModal(`<h2 style="font-family:var(--serif);margin-top:0">${q.id} · ${MLABEL[r.method]} — ${r.correct?'<span class="c-ok">correct</span>':'<span class="c-bad">incorrect</span>'}</h2>
+    <p style="margin:4px 0">${esc(q.question)}</p>
+    <p class="small muted">Iterations: ${r.iterations} · LLM calls: ${r.calls} · model: ${esc(r.modelTier||'')} · first-attempt error: ${esc(r.firstError||'none')} · final error: ${esc(r.finalError||'none')} ${r.carry?'· prompt carried across questions':''}</p>
+    <details><summary class="small">Gold SQL and result (${q.gold.values.length} rows)</summary><pre class="sqlc">${esc(q.gold_sql)}</pre>${tableHTML(q.gold,30)}</details>
+    ${iters}<p class="small muted">Result previews in traces show up to 20 rows.</p>`);
+}
+function openModal(html){ $('#modal-body').innerHTML=html; $('#modal').classList.add('on'); }
+$('#modal-x').onclick=()=>$('#modal').classList.remove('on');
+$('#modal').onclick=e=>{ if(e.target.id==='modal') $('#modal').classList.remove('on'); };
+
+/* charts */
+let CH={};
+function drawCharts(){
+  if(!window.Chart || !$('#v-bench').classList.contains('active')) return;
+  const ms=METHODS.filter(m=>Object.values(RESULTS).some(r=>r.method===m&&!r.failed));
+  const tiers=[1,2,3];
+  const mk=(id,cfg)=>{ if(CH[id]) CH[id].destroy(); CH[id]=new Chart(document.getElementById(id),cfg); };
+  const base=(title,yMax,ylab)=>({responsive:true,maintainAspectRatio:false,plugins:{title:{display:true,text:title,font:{family:'Inter',size:14,weight:'600'},color:'#1d2a24'},legend:{labels:{font:{family:'Inter'}}}},scales:{y:{beginAtZero:true,max:yMax,title:{display:!!ylab,text:ylab}},x:{grid:{display:false}}}});
+  mk('ch-ex',{type:'bar',data:{labels:tiers.map(t=>'Tier '+t),datasets:ms.map(m=>({label:MLABEL[m],backgroundColor:MCOLOR[m],borderRadius:4,data:tiers.map(t=>{const s=stats(r=>r.tier===t)[m];return s?+s.ex.toFixed(1):null})}))},options:base('Execution accuracy by tier (%)',100,'%')});
+  mk('ch-succ',{type:'bar',data:{labels:tiers.map(t=>'Tier '+t),datasets:ms.map(m=>({label:MLABEL[m],backgroundColor:MCOLOR[m],borderRadius:4,data:tiers.map(t=>{const s=stats(r=>r.tier===t)[m];return s?+s.succ.toFixed(1):null})}))},options:base('Successful query rate by tier (%)',100,'%')});
+  mk('ch-it',{type:'bar',data:{labels:tiers.map(t=>'Tier '+t),datasets:ms.map(m=>({label:MLABEL[m],backgroundColor:MCOLOR[m],borderRadius:4,data:tiers.map(t=>{const s=stats(r=>r.tier===t)[m];return s?+s.it.toFixed(2):null})}))},options:base('Average generate→execute iterations',null,'iterations')});
+  // error categories: first attempt vs final, per method (stacked)
+  const cats=['Syntax error','Unknown column','Unknown table','Ambiguous column','Aggregation misuse','Other execution error','Invalid / non-SELECT','Wrong result','Wrong result (empty)'];
+  const ccol=['#b3372f','#d9654f','#e8a07a','#8c6bb1','#6a4c93','#7a7a7a','#444','#c9820a','#e6c26e'];
+  const labels=[]; ms.forEach(m=>{labels.push(MLABEL[m]+' · first'); labels.push(MLABEL[m]+' · final');});
+  const rows=m=>Object.values(RESULTS).filter(r=>r.method===m&&!r.failed);
+  mk('ch-err',{type:'bar',data:{labels,datasets:cats.map((c,i)=>({label:c,backgroundColor:ccol[i],data:ms.flatMap(m=>[rows(m).filter(r=>r.firstError===c).length, rows(m).filter(r=>r.finalError===c).length])})).filter(d=>d.data.some(v=>v>0))},
+    options:Object.assign(base('Error categories: first attempt vs final answer',null,'questions'),{scales:{x:{stacked:true,grid:{display:false},ticks:{font:{size:10}}},y:{stacked:true,beginAtZero:true,ticks:{precision:0}}}})});
+}
+
+/* exports */
+function copyText(t,btn){ navigator.clipboard.writeText(t).then(()=>{const o=btn.textContent;btn.textContent='Copied ✓';setTimeout(()=>btn.textContent=o,1500)}).catch(()=>openModal(`<h3>Copy manually</h3><textarea class="sql" style="min-height:400px">${esc(t)}</textarea>`)); }
+$('#b-csv').onclick=e=>{
+  const cols=['qid','tier','method','modelTier','correct','executed','firstCorrect','firstExecuted','iterations','calls','firstError','finalError','finalSQL'];
+  const q=v=>`"${String(v??'').replace(/"/g,'""')}"`;
+  const lines=[cols.join(',')].concat(Object.values(RESULTS).filter(r=>!r.failed).map(r=>cols.map(c=>q(r[c])).join(',')));
+  copyText(lines.join('\n'), e.target);
+};
+$('#b-json').onclick=e=>copyText(JSON.stringify(RESULTS,null,1), e.target);
+
+/* ===================================================================== */
+/*  Database view                                                         */
+/* ===================================================================== */
+function renderDB(){
+  const tables=['SeedVariety','SeedLot','GerminationTest','StorageLog','Distribution'];
+  $('#tbl-list').innerHTML=tables.map(t=>{const n=DB.exec(`SELECT COUNT(*) FROM ${t}`)[0].values[0][0];return `<button class="chip" data-t="${t}">${t} <span class="muted">(${n})</span></button>`}).join('');
+  $$('#tbl-list .chip').forEach(b=>b.onclick=()=>{ $('#tbl-out').innerHTML=tableHTML(runSQL(`SELECT * FROM ${b.dataset.t} LIMIT 200`),200); });
+  $('#tbl-out').innerHTML=tableHTML(runSQL('SELECT * FROM SeedVariety'),200);
+  renderER(); renderQTable(); renderSummary(); renderKPIs();
+}
+$('#c-run').onclick=()=>{ if(!DB) return; const r=runSQL($('#console').value); $('#c-info').textContent= r.ok? `${r.values.length} rows · ${r.ms.toFixed(1)} ms`:''; $('#c-out').innerHTML = r.ok? tableHTML(r) : `<pre class="err">${esc(r.error)}</pre>`; };
+
+function renderER(){
+  const boxes={
+    SeedVariety:{x:20,y:20,cols:['variety_id PK','crop_name','local_name','crop_type','drought_tolerance']},
+    SeedLot:{x:250,y:20,cols:['lot_id PK','variety_id FK','storage_location','quantity','collection_date']},
+    GerminationTest:{x:480,y:20,cols:['test_id PK','lot_id FK','test_date','germination_rate']},
+    StorageLog:{x:250,y:205,cols:['log_id PK','lot_id FK','recorded_date','temperature','humidity']},
+    Distribution:{x:480,y:205,cols:['distribution_id PK','lot_id FK','destination','quantity','date']},
+  };
+  const W=200,rh=19,hh=26; let s=`<svg viewBox="0 0 700 340" width="100%" role="img" aria-label="Entity relationship diagram">`;
+  const anchor=(b,side,row)=>{const B=boxes[b];const y=B.y+hh+rh*row+rh/2;return side==='l'?[B.x,y]:[B.x+W,y]};
+  const link=(a,b,color)=>{s+=`<path d="M${a[0]},${a[1]} C${(a[0]+b[0])/2},${a[1]} ${(a[0]+b[0])/2},${b[1]} ${b[0]},${b[1]}" fill="none" stroke="${color}" stroke-width="1.8"/>`;};
+  link(anchor('SeedVariety','r',0),anchor('SeedLot','l',1),'#2f7d5f');
+  link(anchor('SeedLot','r',0),anchor('GerminationTest','l',1),'#2c5d8f');
+  link(anchor('SeedLot','l',0),[235,anchor('StorageLog','l',1)[1]],'#c9820a');
+  s+=`<path d="M250,${anchor('SeedLot','l',0)[1]} H235 V${anchor('StorageLog','l',1)[1]} H250" fill="none" stroke="#c9820a" stroke-width="1.8"/>`;
+  link(anchor('SeedLot','r',0),anchor('Distribution','l',1),'#6a4c93');
+  for(const [name,B] of Object.entries(boxes)){
+    const h=hh+rh*B.cols.length+6;
+    s+=`<rect x="${B.x}" y="${B.y}" width="${W}" height="${h}" rx="9" fill="#fff" stroke="#cfcab9"/><rect x="${B.x}" y="${B.y}" width="${W}" height="${hh}" rx="9" fill="#1f5c45"/><rect x="${B.x}" y="${B.y+hh-9}" width="${W}" height="9" fill="#1f5c45"/>`;
+    s+=`<text x="${B.x+10}" y="${B.y+17.5}" fill="#fff" font-size="13" font-weight="700">${name}</text>`;
+    B.cols.forEach((c,i)=>{ const pk=c.endsWith('PK'),fk=c.endsWith('FK'); s+=`<text x="${B.x+10}" y="${B.y+hh+rh*i+14}" font-size="12" fill="${pk?'#1f5c45':fk?'#2c5d8f':'#333'}" font-weight="${pk||fk?600:400}" font-family="JetBrains Mono, monospace">${c}</text>`; });
+  }
+  s+='</svg>'; $('#er').innerHTML=s;
+}
+function renderGraph(){
+  const n=[['Prompt variable','(requires_grad)',30,'#efe9f7','#6a4c93'],['LLM generator','forward',200,'#e6eef7','#2c5d8f'],['SQLite','execute',370,'#e7f1ec','#1f5c45'],['LLM evaluator','textual loss',540,'#fbe9e7','#b3372f']];
+  let s=`<svg viewBox="0 0 720 210" width="100%" role="img" aria-label="TextGrad computation graph">`;
+  s+=`<defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10z" fill="#5d6b64"/></marker><marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10z" fill="#c9820a"/></marker></defs>`;
+  n.forEach(([a,b,x,bg,fg],i)=>{ s+=`<rect x="${x}" y="30" width="150" height="58" rx="10" fill="${bg}" stroke="${fg}"/><text x="${x+75}" y="55" text-anchor="middle" font-size="14" font-weight="700" fill="${fg}">${a}</text><text x="${x+75}" y="74" text-anchor="middle" font-size="12" fill="#5d6b64">${b}</text>`; if(i<3) s+=`<line x1="${x+150}" y1="59" x2="${x+198}" y2="59" stroke="#5d6b64" stroke-width="1.8" marker-end="url(#ar)"/>`; });
+  s+=`<text x="${(180+200)/2}" y="22" text-anchor="middle" font-size="11" fill="#5d6b64">+ schema, question</text><text x="${(350+370)/2}" y="22" text-anchor="middle" font-size="11" fill="#5d6b64">SQL</text><text x="${(520+540)/2}" y="22" text-anchor="middle" font-size="11" fill="#5d6b64">rows / error</text>`;
+  s+=`<path d="M615,90 C615,170 105,170 105,92" fill="none" stroke="#c9820a" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#ar2)"/>`;
+  s+=`<rect x="250" y="140" width="220" height="44" rx="10" fill="#fbf1dc" stroke="#c9820a"/><text x="360" y="158" text-anchor="middle" font-size="13" font-weight="700" fill="#8a5a00">backward: ∂loss/∂prompt</text><text x="360" y="176" text-anchor="middle" font-size="12" fill="#8a5a00">then TGD step rewrites the prompt</text>`;
+  s+='</svg>'; $('#graph').innerHTML=s;
+}
+
+/* ===================================================================== */
+renderGraph(); renderKPIs(); renderSummary();
+initDB();
+initLLM();
+loadScript(['https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js','https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js']).then(drawCharts).catch(()=>{});
+</script>
+</body>
+</html>

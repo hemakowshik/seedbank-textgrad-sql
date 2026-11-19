@@ -1,0 +1,119 @@
+{
+  "assumptions": {
+    "reference_date": "2026-11-01",
+    "germination_threshold_percent": 75,
+    "recommended_max_temperature_c": 15,
+    "recommended_max_humidity_percent": 50,
+    "viable_stock": "lot quantity > 0 AND the lot's most recent germination_rate >= 75"
+  },
+  "few_shot_examples": [
+    {
+      "question": "List the local names of all pulse varieties.",
+      "sql": "SELECT local_name FROM SeedVariety WHERE crop_type = 'Pulse';"
+    },
+    {
+      "question": "How many seed lots are stored at each storage location?",
+      "sql": "SELECT storage_location, COUNT(*) AS lot_count FROM SeedLot GROUP BY storage_location;"
+    },
+    {
+      "question": "What is the most recent germination rate of each seed lot?",
+      "sql": "SELECT g.lot_id, g.germination_rate FROM GerminationTest g WHERE g.test_date = (SELECT MAX(g2.test_date) FROM GerminationTest g2 WHERE g2.lot_id = g.lot_id);"
+    },
+    {
+      "question": "Which varieties have never been distributed?",
+      "sql": "SELECT v.local_name FROM SeedVariety v WHERE NOT EXISTS (SELECT 1 FROM SeedLot l JOIN Distribution d ON d.lot_id = l.lot_id WHERE l.variety_id = v.variety_id);"
+    }
+  ],
+  "questions": [
+    {
+      "id": "T1-01", "tier": 1,
+      "question": "List the crop name and local name of all varieties tagged as highly drought-tolerant.",
+      "gold_sql": "SELECT crop_name, local_name FROM SeedVariety WHERE drought_tolerance = 'High';"
+    },
+    {
+      "id": "T1-02", "tier": 1,
+      "question": "Which seed lots are stored in Cold Room A?",
+      "gold_sql": "SELECT lot_id FROM SeedLot WHERE storage_location = 'Cold Room A';"
+    },
+    {
+      "id": "T1-03", "tier": 1,
+      "question": "Show the germination tests conducted in 2026 with a germination rate below 75%.",
+      "gold_sql": "SELECT test_id, lot_id, test_date, germination_rate FROM GerminationTest WHERE test_date >= '2026-01-01' AND test_date < '2027-01-01' AND germination_rate < 75;"
+    },
+    {
+      "id": "T1-04", "tier": 1,
+      "question": "How many seed varieties are millets?",
+      "gold_sql": "SELECT COUNT(*) FROM SeedVariety WHERE crop_type = 'Millet';"
+    },
+    {
+      "id": "T1-05", "tier": 1,
+      "question": "Which seed lots were collected before 2018?",
+      "gold_sql": "SELECT lot_id FROM SeedLot WHERE collection_date < '2018-01-01';"
+    },
+    {
+      "id": "T1-06", "tier": 1,
+      "question": "Which seed lots have run out of stock (zero quantity)?",
+      "gold_sql": "SELECT lot_id FROM SeedLot WHERE quantity = 0;"
+    },
+    {
+      "id": "T2-01", "tier": 2,
+      "question": "What is the total available seed quantity in grams at each storage location?",
+      "gold_sql": "SELECT storage_location, SUM(quantity) AS total_quantity FROM SeedLot GROUP BY storage_location;"
+    },
+    {
+      "id": "T2-02", "tier": 2,
+      "question": "What is the average germination rate for each year in which tests were conducted?",
+      "gold_sql": "SELECT strftime('%Y', test_date) AS test_year, AVG(germination_rate) AS avg_rate FROM GerminationTest GROUP BY test_year;"
+    },
+    {
+      "id": "T2-03", "tier": 2,
+      "question": "Which 5 seed lots have been stored outside recommended conditions (temperature above 15 C or humidity above 50%) for the longest time, measured by the number of out-of-range storage readings?",
+      "gold_sql": "SELECT lot_id, COUNT(*) AS out_of_range_readings FROM StorageLog WHERE temperature > 15 OR humidity > 50 GROUP BY lot_id ORDER BY out_of_range_readings DESC LIMIT 5;"
+    },
+    {
+      "id": "T2-04", "tier": 2,
+      "question": "Which destinations have received more than 2000 grams of seed in total?",
+      "gold_sql": "SELECT destination, SUM(quantity) AS total_received FROM Distribution GROUP BY destination HAVING SUM(quantity) > 2000;"
+    },
+    {
+      "id": "T2-05", "tier": 2,
+      "question": "Which seed lots have been germination-tested 3 or more times, and how many tests does each have?",
+      "gold_sql": "SELECT lot_id, COUNT(*) AS n_tests FROM GerminationTest GROUP BY lot_id HAVING COUNT(*) >= 3;"
+    },
+    {
+      "id": "T2-06", "tier": 2,
+      "question": "How many varieties are there of each crop type and drought-tolerance level?",
+      "gold_sql": "SELECT crop_type, drought_tolerance, COUNT(*) AS n_varieties FROM SeedVariety GROUP BY crop_type, drought_tolerance;"
+    },
+    {
+      "id": "T3-01", "tier": 3,
+      "question": "Which seed lots have a most recent germination rate below 75% and need retesting? Show the lot and that latest rate.",
+      "gold_sql": "SELECT g.lot_id, g.germination_rate FROM GerminationTest g WHERE g.test_date = (SELECT MAX(g2.test_date) FROM GerminationTest g2 WHERE g2.lot_id = g.lot_id) AND g.germination_rate < 75;"
+    },
+    {
+      "id": "T3-02", "tier": 3,
+      "question": "Which highly drought-tolerant varieties have viable stock available, meaning at least one lot with quantity above zero whose most recent germination rate is at least 75%? Give the local names.",
+      "gold_sql": "SELECT DISTINCT v.local_name FROM SeedVariety v JOIN SeedLot l ON l.variety_id = v.variety_id JOIN GerminationTest g ON g.lot_id = l.lot_id WHERE v.drought_tolerance = 'High' AND l.quantity > 0 AND g.germination_rate >= 75 AND g.test_date = (SELECT MAX(g2.test_date) FROM GerminationTest g2 WHERE g2.lot_id = l.lot_id);"
+    },
+    {
+      "id": "T3-03", "tier": 3,
+      "question": "Summarize available seed lots (quantity above zero) by variety local name and storage location, showing the number of lots and the total quantity.",
+      "gold_sql": "SELECT v.local_name, l.storage_location, COUNT(*) AS n_lots, SUM(l.quantity) AS total_quantity FROM SeedLot l JOIN SeedVariety v ON v.variety_id = l.variety_id WHERE l.quantity > 0 GROUP BY v.local_name, l.storage_location;"
+    },
+    {
+      "id": "T3-04", "tier": 3,
+      "question": "Which varieties have a germination result below 75% recorded in 2025 or later with no later retest recorded on the same lot? Give the local names.",
+      "gold_sql": "SELECT DISTINCT v.local_name FROM GerminationTest g JOIN SeedLot l ON l.lot_id = g.lot_id JOIN SeedVariety v ON v.variety_id = l.variety_id WHERE g.germination_rate < 75 AND g.test_date >= '2025-01-01' AND NOT EXISTS (SELECT 1 FROM GerminationTest g2 WHERE g2.lot_id = g.lot_id AND g2.test_date > g.test_date);"
+    },
+    {
+      "id": "T3-05", "tier": 3,
+      "question": "Which storage location's seed lots supplied the largest total quantity of distributed seed, and how much was it?",
+      "gold_sql": "SELECT l.storage_location, SUM(d.quantity) AS total_distributed FROM Distribution d JOIN SeedLot l ON l.lot_id = d.lot_id GROUP BY l.storage_location ORDER BY total_distributed DESC LIMIT 1;"
+    },
+    {
+      "id": "T3-06", "tier": 3,
+      "question": "Which varieties have been distributed to more than 3 different destinations? Give the local name and the number of destinations.",
+      "gold_sql": "SELECT v.local_name, COUNT(DISTINCT d.destination) AS n_destinations FROM Distribution d JOIN SeedLot l ON l.lot_id = d.lot_id JOIN SeedVariety v ON v.variety_id = l.variety_id GROUP BY v.variety_id HAVING COUNT(DISTINCT d.destination) > 3;"
+    }
+  ]
+}

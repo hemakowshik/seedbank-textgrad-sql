@@ -1,0 +1,4 @@
+matplotlib>=3.7
+# optional: official TextGrad package (needed only for --methods textgrad_lib)
+textgrad
+openai

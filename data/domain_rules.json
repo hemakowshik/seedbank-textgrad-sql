@@ -1,0 +1,218 @@
+{
+  "_comment": "Configurable seed-bank domain rules used by seedsql/validator.py. These are documented project assumptions, not universal agricultural facts. Change thresholds or phrases here; no code change is needed.",
+  "reference_date": "2026-11-01",
+  "defaults": {
+    "germination_threshold": 75,
+    "max_storage_temperature_c": 15,
+    "max_storage_humidity_pct": 50
+  },
+  "schema": {
+    "lot_table": "SeedLot",
+    "variety_table": "SeedVariety",
+    "test_table": "GerminationTest",
+    "log_table": "StorageLog",
+    "distribution_table": "Distribution",
+    "join_keys": [
+      [
+        "SeedLot.variety_id",
+        "SeedVariety.variety_id"
+      ],
+      [
+        "GerminationTest.lot_id",
+        "SeedLot.lot_id"
+      ],
+      [
+        "StorageLog.lot_id",
+        "SeedLot.lot_id"
+      ],
+      [
+        "Distribution.lot_id",
+        "SeedLot.lot_id"
+      ]
+    ],
+    "stock_semantics": "SeedLot.quantity is the CURRENT stock after all distributions; subtracting Distribution.quantity from it double-counts."
+  },
+  "phrases": {
+    "latest": [
+      "most recent",
+      "latest",
+      "current germination",
+      "last test",
+      "newest",
+      "currently viable",
+      "still viable"
+    ],
+    "viable": [
+      "viable stock",
+      "viable",
+      "still viable"
+    ],
+    "stock": [
+      "available",
+      "are in stock",
+      "currently in stock",
+      "quantity above zero",
+      "quantity greater than zero",
+      "viable stock",
+      "have stock",
+      "with stock"
+    ],
+    "out_of_stock": [
+      "run out",
+      "out of stock",
+      "zero quantity",
+      "exhausted",
+      "no stock"
+    ],
+    "below": [
+      "below",
+      "less than",
+      "under",
+      "lower than"
+    ],
+    "at_least": [
+      "at least",
+      "or more",
+      "or above",
+      "minimum of"
+    ],
+    "above": [
+      "above",
+      "more than",
+      "greater than",
+      "over",
+      "exceeded",
+      "exceeds"
+    ],
+    "group_each": [
+      "for each",
+      "per ",
+      "by variety",
+      "by storage",
+      "by crop",
+      "at each",
+      "of each",
+      "each "
+    ],
+    "count": [
+      "how many",
+      "number of"
+    ],
+    "no_retest": [
+      "no retest",
+      "no later",
+      "not been retested",
+      "never retested",
+      "without a retest",
+      "not tested again",
+      "not retested",
+      "no later test",
+      "not been tested again"
+    ],
+    "storage_violation": [
+      "outside recommended",
+      "out-of-range",
+      "out of range",
+      "recommended conditions",
+      "recommended storage"
+    ]
+  },
+  "rules": [
+    {
+      "id": "TEMP-LATEST",
+      "category": "temporal",
+      "applies_if": "latest",
+      "check": "sql has per-lot latest-test selection (MAX(test_date) correlated / window ROW_NUMBER / ORDER BY test_date DESC with grouping)",
+      "feedback": "Select the most recent germination test separately for each lot (e.g. test_date = (SELECT MAX(test_date) ... WHERE lot_id = outer.lot_id)) before applying any threshold."
+    },
+    {
+      "id": "TEMP-PERLOT",
+      "category": "temporal",
+      "applies_if": "latest",
+      "check": "a MAX(test_date) subquery is correlated with the outer lot (WHERE ...lot_id = outer.lot_id) or grouped by lot_id",
+      "feedback": "The latest test must be found for EACH lot: correlate the MAX(test_date) subquery on lot_id (or GROUP BY lot_id). A subquery over the whole table returns only the single newest test in the database."
+    },
+    {
+      "id": "TEMP-RANGE",
+      "category": "temporal",
+      "applies_if": "year",
+      "check": "every year/date bound stated in the question appears in the SQL date filter",
+      "feedback": "Restrict the date column to exactly the period stated in the question (dates are TEXT 'YYYY-MM-DD')."
+    },
+    {
+      "id": "TEMP-NORETEST",
+      "category": "temporal",
+      "applies_if": "no_retest",
+      "check": "sql excludes records that have a later test on the same lot (NOT EXISTS / MAX)",
+      "feedback": "Exclude results that have a later germination test on the same lot (NOT EXISTS a test with a greater test_date)."
+    },
+    {
+      "id": "DOM-THRESHOLD",
+      "category": "domain",
+      "applies_if": "threshold",
+      "check": "the germination threshold and comparison direction stated in the question appear in the SQL",
+      "feedback": "Apply the germination threshold exactly as stated: 'below N%' is germination_rate < N, 'at least N%' is germination_rate >= N."
+    },
+    {
+      "id": "DOM-STOCK",
+      "category": "domain",
+      "applies_if": "stock",
+      "check": "sql requires SeedLot.quantity > 0",
+      "feedback": "Only count lots with stock: add SeedLot.quantity > 0."
+    },
+    {
+      "id": "DOM-DOUBLECOUNT",
+      "category": "domain",
+      "applies_if": "always",
+      "check": "sql does not subtract Distribution.quantity from SeedLot.quantity",
+      "feedback": "SeedLot.quantity is already the current stock after distributions; do not subtract Distribution.quantity from it."
+    },
+    {
+      "id": "DOM-STORAGE",
+      "category": "domain",
+      "applies_if": "storage_violation",
+      "check": "temperature and humidity limits stated in the question appear with the right logical connective",
+      "feedback": "A reading is out of range if temperature > limit OR humidity > limit, using the limits stated in the question."
+    },
+    {
+      "id": "JOIN-KEY",
+      "category": "join",
+      "applies_if": "always",
+      "check": "every join between seed-bank tables uses the documented foreign-key pair",
+      "feedback": "Join SeedLot to SeedVariety on variety_id, and GerminationTest / StorageLog / Distribution to SeedLot on lot_id."
+    },
+    {
+      "id": "AGG-GROUP",
+      "category": "aggregation",
+      "applies_if": "group_each",
+      "check": "an aggregate asked 'for each X' has a GROUP BY",
+      "feedback": "Group by the entity the question names ('for each X') and aggregate within each group."
+    },
+    {
+      "id": "AGG-COUNT",
+      "category": "aggregation",
+      "applies_if": "count",
+      "check": "a 'how many' question returns a count",
+      "feedback": "Return a COUNT for 'how many' questions (use COUNT(DISTINCT ...) when entities can repeat across joins)."
+    },
+    {
+      "id": "SCHEMA",
+      "category": "schema",
+      "applies_if": "error",
+      "check": "sql references only existing tables and columns",
+      "feedback": "Use only the tables and columns listed in the schema."
+    },
+    {
+      "id": "AGG-BARE",
+      "category": "aggregation",
+      "applies_if": "always",
+      "check": "no outer SELECT mixes aggregate functions with plain columns without GROUP BY (SQLite accepts this silently)",
+      "feedback": "When the SELECT list mixes aggregates with plain columns, GROUP BY the plain columns."
+    }
+  ],
+  "metamorphic": {
+    "_comment": "Gold-free semantic tests: the database is changed in a controlled way and the predicted SQL is re-run. The expected change in its output follows from the question's intent alone.",
+    "max_tests_per_query": 4,
+    "margin": 15
+  }
+}

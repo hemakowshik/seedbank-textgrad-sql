@@ -54,6 +54,17 @@ CROPS = [
     ("Solanum melongena", "Brinjal", "Vegetable", "Low"),
     ("Abelmoschus esculentus", "Okra", "Vegetable", "Medium"),
 ]
+# ICRISAT (IND002) accession-number prefixes -> crop. Each prefix was checked against its Genesys
+# accession page (e.g. IEc 797 = Echinochloa colona, barnyard millet; IPs 937 = Paspalum scrobiculatum,
+# kodo millet; GGP 1 = Arachis hypogaea; ISC 1 = Cajanus cajan; ISP 1 = Pennisetum glaucum; ISS 1 = Sorghum bicolor).
+# Used when the download has no genus/crop columns (Genesys "Quick download" default fields).
+ICRISAT_PREFIX = {
+    "IS": "Sorghum", "ISS": "Sorghum", "IP": "Pearl millet", "ISP": "Pearl millet", "ICC": "Chickpea",
+    "ICG": "Groundnut", "GGP": "Groundnut", "ICP": "Pigeon pea", "ISC": "Pigeon pea", "IE": "Finger millet",
+    "ISe": "Foxtail millet", "IPm": "Proso millet", "IEc": "Barnyard millet", "IPs": "Kodo millet",
+    "IPmr": "Little millet",
+}
+
 SAMPSTAT = {"1": "Wild", "2": "Weedy", "3": "Landrace", "4": "Breeding material", "5": "Improved cultivar",
             "9": "Other"}
 LOCATIONS = {  # name: (temp mean, sd, humidity mean, sd, quality factor)   -- simulated
@@ -73,6 +84,7 @@ CREATE TABLE SeedVariety (
     drought_tolerance TEXT NOT NULL,
     accession_number  TEXT NOT NULL,      -- real genebank accession number (e.g. IS 1234)
     genebank          TEXT,               -- holding institute code (FAO WIEWS), e.g. IND002
+    doi               TEXT,               -- Genesys DOI of the accession (https://doi.org/<doi>)
     scientific_name   TEXT,
     origin_country    TEXT,               -- ISO 3166 alpha-3, e.g. IND
     biological_status TEXT,               -- Landrace / Improved cultivar / Wild / ...
@@ -103,6 +115,7 @@ ALIASES = {  # MCPD names and common Genesys / Darwin Core alternatives
     "origcty": ["origcty", "origincountry", "countryoforigin", "origCty", "country"],
     "sampstat": ["sampstat", "biologicalstatus", "sampStat"],
     "sciname": ["scientificname", "taxonomy", "fullname"],
+    "doi": ["doi", "puid"],
 }
 
 
@@ -130,9 +143,10 @@ def read_rows(path):
             if k in norm:
                 cols[key] = norm[k]
                 break
-    missing = [k for k in ("accenumb",) if k not in cols]
-    if missing or ("genus" not in cols and "sciname" not in cols):
-        sys.exit(f"Could not find accession number / genus columns. Columns found: {list(rows[0].keys())[:30]}")
+    if "accenumb" not in cols:
+        sys.exit(f"Could not find an accession number column. Columns found: {list(rows[0].keys())[:30]}")
+    if "genus" not in cols and "sciname" not in cols:
+        print("No genus/crop columns: inferring crop from ICRISAT accession-number prefixes.")
     return rows, cols
 
 
@@ -166,7 +180,11 @@ def build(rows, cols, per_crop, seed):
         if not genus and g(r, "sciname"):
             parts = g(r, "sciname").split()
             genus, species = parts[0], (parts[1] if len(parts) > 1 else "")
-        c = classify(genus, species)
+        c = classify(genus, species) if genus else None
+        if not c and not genus:
+            m = re.match(r"^[A-Za-z]+", g(r, "accenumb"))
+            crop = ICRISAT_PREFIX.get(m.group(0)) if m else None
+            c = next(((cr, ct, dr) for _, cr, ct, dr in CROPS if cr == crop), None)
         if not c or not g(r, "accenumb"):
             continue
         by_crop.setdefault(c, []).append((r, genus, species))
@@ -181,7 +199,7 @@ def build(rows, cols, per_crop, seed):
             varieties.append(dict(
                 crop_name=crop, local_name=g(r, "accename") or g(r, "accenumb"), crop_type=ctype,
                 drought_tolerance=drought, accession_number=g(r, "accenumb"), genebank=g(r, "instcode") or None,
-                scientific_name=f"{genus} {species}".strip(), origin_country=g(r, "origcty") or None,
+                scientific_name=f"{genus} {species}".strip() or None, doi=g(r, "doi") or None, origin_country=g(r, "origcty") or None,
                 biological_status=SAMPSTAT.get(st[:1], None) if st else None,
                 acquisition_date=parse_acq(g(r, "acqdate"))))
     # make local names unique (questions return local names)
@@ -224,10 +242,31 @@ def build(rows, cols, per_crop, seed):
                 dists.append((did, lid, rng.choice(DESTINATIONS), rng.choice([100, 200, 250, 300, 500, 750, 1000]),
                               dd.isoformat()))
     vrows = [(i, v["crop_name"], v["local_name"], v["crop_type"], v["drought_tolerance"], v["accession_number"],
-              v["genebank"], v["scientific_name"], v["origin_country"], v["biological_status"], v["acquisition_date"])
+              v["genebank"], v["doi"], v["scientific_name"], v["origin_country"], v["biological_status"], v["acquisition_date"])
              for i, v in enumerate(varieties, start=1)]
+    # drop optional columns that are empty for every accession (e.g. a download without names/dates)
+    names = ["variety_id", "crop_name", "local_name", "crop_type", "drought_tolerance", "accession_number",
+             "genebank", "doi", "scientific_name", "origin_country", "biological_status", "acquisition_date"]
+    keep = [i for i, n in enumerate(names) if i < 6 or any(r[i] for r in vrows)]
+    vrows = [tuple(r[i] for i in keep) for r in vrows]
+    build.kept_columns = [names[i] for i in keep]
     return [("SeedVariety", vrows), ("SeedLot", lots), ("GerminationTest", tests), ("StorageLog", logs),
             ("Distribution", dists)]
+
+
+def schema_for(kept):
+    """SCHEMA with the SeedVariety table reduced to the columns that have data."""
+    head, rest = SCHEMA.split("CREATE TABLE SeedLot", 1)
+    lines = head.splitlines()
+    out = []
+    for ln in lines:
+        m = re.match(r"\s+(\w+)\s+(INTEGER|TEXT)", ln)
+        if m and m.group(1) not in kept:
+            continue
+        out.append(ln)
+    t = "\n".join(out)
+    t = re.sub(r",(\s*(--[^\n]*)?\n\);)", r"\1", t)  # no trailing comma before ');'
+    return t + "\nCREATE TABLE SeedLot" + rest
 
 
 def lit(v):
@@ -238,17 +277,33 @@ def lit(v):
     return "'" + str(v).replace("'", "''") + "'"
 
 
+def origin_line(con):
+    cols = {r[1] for r in con.execute("PRAGMA table_info(SeedVariety)")}
+    st = [r[0] for r in con.execute("SELECT DISTINCT biological_status FROM SeedVariety WHERE biological_status IS NOT NULL ORDER BY 1")] if "biological_status" in cols else []
+    has_origin = "origin_country" in cols
+    parts = []
+    if "doi" in cols:
+        parts.append("doi = the accession's Genesys DOI (e.g. '10.18730/QP1EF')")
+    if has_origin:
+        parts.append("origin_country is an ISO 3166 alpha-3 code (e.g. 'IND')")
+    if st:
+        parts.append("biological_status values: " + ",".join("'" + x + "'" for x in st))
+    return "  -- " + "; ".join(parts)
+
+
 def schema_text(con):
     vals = lambda sql: ",".join("'" + r[0] + "'" for r in con.execute(sql))
-    return f"""SeedVariety(variety_id INTEGER PK, crop_name TEXT, local_name TEXT, crop_type TEXT, drought_tolerance TEXT, accession_number TEXT, genebank TEXT, scientific_name TEXT, origin_country TEXT, biological_status TEXT, acquisition_date TEXT)
+    cols = [r[1] for r in con.execute("PRAGMA table_info(SeedVariety)")]
+    sig = ", ".join(c + (" INTEGER PK" if c == "variety_id" else " TEXT") for c in cols)
+    return f"""SeedVariety({sig})
   -- one row per real genebank accession; local_name = accession name (or accession number if unnamed)
   -- crop_type values: {vals("SELECT DISTINCT crop_type FROM SeedVariety ORDER BY 1")}
   -- drought_tolerance values: {vals("SELECT DISTINCT drought_tolerance FROM SeedVariety ORDER BY 1")}
   -- crop_name values: {vals("SELECT DISTINCT crop_name FROM SeedVariety ORDER BY 1")}
-  -- origin_country is an ISO 3166 alpha-3 code (e.g. 'IND'); biological_status values: {vals("SELECT DISTINCT biological_status FROM SeedVariety WHERE biological_status IS NOT NULL ORDER BY 1")}
+{origin_line(con)}
 SeedLot(lot_id INTEGER PK, variety_id INTEGER FK->SeedVariety.variety_id, storage_location TEXT, quantity INTEGER, collection_date TEXT)
   -- storage_location values: {vals("SELECT DISTINCT storage_location FROM SeedLot ORDER BY 1")}
-  -- quantity = grams currently in stock (0 means exhausted); collection_date = date this seed lot was harvested/regenerated
+  -- quantity = grams currently in stock, already AFTER all distributions (0 means exhausted); collection_date = date this seed lot was harvested/regenerated
 GerminationTest(test_id INTEGER PK, lot_id INTEGER FK->SeedLot.lot_id, test_date TEXT, germination_rate REAL)
   -- germination_rate is a percentage 0-100; a lot can have several tests over time
 StorageLog(log_id INTEGER PK, lot_id INTEGER FK->SeedLot.lot_id, recorded_date TEXT, temperature REAL, humidity REAL)
@@ -290,7 +345,8 @@ def main():
 
     for seed in range(a.seed, a.seed + 200):  # find a sample where every gold query is well-defined
         tables = build(rows, cols, a.per_crop, seed)
-        lines = ["-- Community seed-bank database: REAL Genesys accession records + simulated lot monitoring.", SCHEMA]
+        lines = ["-- Community seed-bank database: REAL Genesys accession records + simulated lot monitoring.",
+                 schema_for(build.kept_columns)]
         for name, rs in tables:
             lines += [f"INSERT INTO {name} VALUES ({', '.join(lit(x) for x in r)});" for r in rs]
         script = "\n".join(lines) + "\n"

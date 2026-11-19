@@ -6,7 +6,7 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 with open(os.path.join(_ROOT, "data", "benchmark.json"), encoding="utf-8") as _f:
     BENCH = json.load(_f)
 
-SCHEMA_TEXT = """SeedVariety(variety_id INTEGER PK, crop_name TEXT, local_name TEXT, crop_type TEXT, drought_tolerance TEXT)
+_DEFAULT_SCHEMA_TEXT = """SeedVariety(variety_id INTEGER PK, crop_name TEXT, local_name TEXT, crop_type TEXT, drought_tolerance TEXT)
   -- crop_type values: 'Millet','Cereal','Pulse','Vegetable','Oilseed'
   -- drought_tolerance values: 'High','Medium','Low'
 SeedLot(lot_id INTEGER PK, variety_id INTEGER FK->SeedVariety.variety_id, storage_location TEXT, quantity INTEGER, collection_date TEXT)
@@ -19,6 +19,8 @@ StorageLog(log_id INTEGER PK, lot_id INTEGER FK->SeedLot.lot_id, recorded_date T
 Distribution(distribution_id INTEGER PK, lot_id INTEGER FK->SeedLot.lot_id, destination TEXT, quantity INTEGER, date TEXT)
   -- seed given out to farmer groups; quantity in grams
 Notes: all dates are TEXT 'YYYY-MM-DD'. The database engine is SQLite. Today's date is 2026-11-01."""
+# The real-data builder writes an exact schema description into benchmark.json
+SCHEMA_TEXT = BENCH.get("schema_text") or _DEFAULT_SCHEMA_TEXT
 
 BASE_INSTRUCTIONS = ("You are an expert assistant that translates questions about a community seed-bank "
                      "database into a single correct SQLite query. Use only the tables and columns in the "

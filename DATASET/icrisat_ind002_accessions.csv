@@ -1,0 +1,145 @@
+instCode,acceNumb,genus,species,cropName,acceName,origCty,sampStat,acqDate
+IND002,ICRISAT-ELE-43131337,Eleusine,coracana,Finger millet,Finger millet 1,IN,3,19950601
+IND002,ICRISAT-ELE-43131340,Eleusine,coracana,Finger millet,Finger millet 2,IN,3,19950601
+IND002,ICRISAT-ELE-43131342,Eleusine,coracana,Finger millet,Finger millet 3,IND,3,19950601
+IND002,ICRISAT-ELE-43131345,Eleusine,coracana,Finger millet,Finger millet 4,IND,3,19950601
+IND002,ICRISAT-ELE-43131348,Eleusine,coracana,Finger millet,Finger millet 5,IND,3,19950601
+IND002,ICRISAT-ELE-43131349,Eleusine,coracana,Finger millet,Finger millet 6,IND,3,19950601
+IND002,ICRISAT-ELE-43131351,Eleusine,coracana,Finger millet,Finger millet 7,IND,3,19950601
+IND002,ICRISAT-ELE-43131352,Eleusine,coracana,Finger millet,Finger millet 8,IND,3,19950601
+IND002,ICRISAT-ELE-43131353,Eleusine,coracana,Finger millet,Finger millet 9,IND,3,19950601
+IND002,ICRISAT-ELE-43131355,Eleusine,coracana,Finger millet,Finger millet 10,IN,3,19950601
+IND002,ICRISAT-ELE-43131356,Eleusine,coracana,Finger millet,Finger millet 11,IND,3,19950601
+IND002,ICRISAT-ELE-43131357,Eleusine,coracana,Finger millet,Finger millet 12,IND,3,19950601
+IND002,ICRISAT-ELE-43131359,Eleusine,coracana,Finger millet,Finger millet 13,IND,3,19950601
+IND002,ICRISAT-ELE-43131360,Eleusine,coracana,Finger millet,Finger millet 14,IND,3,19950601
+IND002,ICRISAT-ELE-43131365,Eleusine,coracana,Finger millet,Finger millet 15,IND,3,19950601
+IND002,ICRISAT-SET-48458099,Setaria,italica,Foxtail millet,Foxtail millet 1,IN,3,19950601
+IND002,ICRISAT-SET-48458100,Setaria,italica,Foxtail millet,Foxtail millet 2,IN,3,19950601
+IND002,ICRISAT-SET-48458101,Setaria,italica,Foxtail millet,Foxtail millet 3,IN,3,19950601
+IND002,ICRISAT-SET-48458102,Setaria,italica,Foxtail millet,Foxtail millet 4,IN,3,19950601
+IND002,ICRISAT-SET-48458103,Setaria,italica,Foxtail millet,Foxtail millet 5,IN,3,19950601
+IND002,ICRISAT-SET-48458104,Setaria,italica,Foxtail millet,Foxtail millet 6,IN,3,19950601
+IND002,ICRISAT-SET-48458105,Setaria,italica,Foxtail millet,Foxtail millet 7,IN,3,19950601
+IND002,ICRISAT-SET-48458106,Setaria,italica,Foxtail millet,Foxtail millet 8,IN,3,19950601
+IND002,ICRISAT-SET-48458107,Setaria,italica,Foxtail millet,Foxtail millet 9,IN,3,19950601
+IND002,ICRISAT-SET-48458108,Setaria,italica,Foxtail millet,Foxtail millet 10,LB,3,19950601
+IND002,ICRISAT-SET-48458109,Setaria,italica,Foxtail millet,Foxtail millet 11,LB,3,19950601
+IND002,ICRISAT-SET-48458110,Setaria,italica,Foxtail millet,Foxtail millet 12,LB,3,19950601
+IND002,ICRISAT-SET-48458111,Setaria,italica,Foxtail millet,Foxtail millet 13,LB,3,19950601
+IND002,ICRISAT-SET-48458112,Setaria,italica,Foxtail millet,Foxtail millet 14,LB,3,19950601
+IND002,ICRISAT-SET-48458113,Setaria,italica,Foxtail millet,Foxtail millet 15,LB,3,19950601
+IND002,ICRISAT-PAS-47311036,Paspalum,scrobiculatum,Kodo millet,Kodo millet 1,IN,3,19950601
+IND002,ICRISAT-PAS-47311037,Paspalum,scrobiculatum,Kodo millet,Kodo millet 2,IN,3,19950601
+IND002,ICRISAT-PAS-47311038,Paspalum,scrobiculatum,Kodo millet,Kodo millet 3,IN,3,19950601
+IND002,ICRISAT-PAS-47311039,Paspalum,scrobiculatum,Kodo millet,Kodo millet 4,IN,3,19950601
+IND002,ICRISAT-PAS-47311040,Paspalum,scrobiculatum,Kodo millet,Kodo millet 5,IN,3,19950601
+IND002,ICRISAT-PAS-47311041,Paspalum,scrobiculatum,Kodo millet,Kodo millet 6,IN,3,19950601
+IND002,ICRISAT-PAS-47311042,Paspalum,scrobiculatum,Kodo millet,Kodo millet 7,IN,3,19950601
+IND002,ICRISAT-PAS-47311043,Paspalum,scrobiculatum,Kodo millet,Kodo millet 8,IN,3,19950601
+IND002,ICRISAT-PAS-47311044,Paspalum,scrobiculatum,Kodo millet,Kodo millet 9,IN,3,19950601
+IND002,ICRISAT-PAS-47311045,Paspalum,scrobiculatum,Kodo millet,Kodo millet 10,IN,3,19950601
+IND002,ICRISAT-PAS-47311046,Paspalum,scrobiculatum,Kodo millet,Kodo millet 11,IN,3,19950601
+IND002,ICRISAT-PAS-47311047,Paspalum,scrobiculatum,Kodo millet,Kodo millet 12,IN,3,19950601
+IND002,ICRISAT-PAS-47311048,Paspalum,scrobiculatum,Kodo millet,Kodo millet 13,IN,3,19950601
+IND002,ICRISAT-PAS-47311049,Paspalum,scrobiculatum,Kodo millet,Kodo millet 14,IN,3,19950601
+IND002,ICRISAT-PAS-47311050,Paspalum,scrobiculatum,Kodo millet,Kodo millet 15,IN,3,19950601
+IND002,ICRISAT-PEN-47311750,Pennisetum,glaucum,Pearl millet,Pearl millet 1,IN,3,19950601
+IND002,ICRISAT-PEN-47311751,Pennisetum,glaucum,Pearl millet,Pearl millet 2,IN,3,19950601
+IND002,ICRISAT-PEN-47311752,Pennisetum,glaucum,Pearl millet,Pearl millet 3,IN,3,19950601
+IND002,ICRISAT-PEN-47311753,Pennisetum,glaucum,Pearl millet,Pearl millet 4,ML,3,19950601
+IND002,ICRISAT-PEN-47311754,Pennisetum,glaucum,Pearl millet,Pearl millet 5,ML,3,19950601
+IND002,ICRISAT-PEN-47311755,Pennisetum,glaucum,Pearl millet,Pearl millet 6,ML,3,19950601
+IND002,ICRISAT-PEN-47311756,Pennisetum,glaucum,Pearl millet,Pearl millet 7,ML,3,19950601
+IND002,ICRISAT-PEN-47311757,Pennisetum,glaucum,Pearl millet,Pearl millet 8,ML,3,19950601
+IND002,ICRISAT-PEN-47311758,Pennisetum,glaucum,Pearl millet,Pearl millet 9,ML,3,19950601
+IND002,ICRISAT-PEN-47311759,Pennisetum,glaucum,Pearl millet,Pearl millet 10,ML,3,19950601
+IND002,ICRISAT-PEN-47311760,Pennisetum,glaucum,Pearl millet,Pearl millet 11,ML,3,19950601
+IND002,ICRISAT-PEN-47311761,Pennisetum,glaucum,Pearl millet,Pearl millet 12,ML,3,19950601
+IND002,ICRISAT-PEN-47311762,Pennisetum,glaucum,Pearl millet,Pearl millet 13,ML,3,19950601
+IND002,ICRISAT-PEN-47311763,Pennisetum,glaucum,Pearl millet,Pearl millet 14,IN,3,19950601
+IND002,ICRISAT-PEN-47311764,Pennisetum,glaucum,Pearl millet,Pearl millet 15,ML,3,19950601
+IND002,IS 2013252739,Sorghum,bicolor,Sorghum,Sorghum 1,MW,3,19790601
+IND002,IS 2013252734,Sorghum,bicolor,Sorghum,Sorghum 2,MW,3,19780601
+IND002,IS 2013252740,Sorghum,bicolor,Sorghum,Sorghum 3,MW,3,19780601
+IND002,IS 2013252745,Sorghum,bicolor,Sorghum,Sorghum 4,MW,3,19780601
+IND002,IS 47396682,Sorghum,bicolor,Sorghum,Sorghum 5,SD,3,19950601
+IND002,IS 47396683,Sorghum,bicolor,Sorghum,Sorghum 6,SD,3,19950601
+IND002,IS 47396684,Sorghum,bicolor,Sorghum,Sorghum 7,SD,3,19950601
+IND002,IS 47396685,Sorghum,bicolor,Sorghum,Sorghum 8,SD,3,19950601
+IND002,IS 47396686,Sorghum,bicolor,Sorghum,Sorghum 9,SD,3,19950601
+IND002,IS 47396687,Sorghum,bicolor,Sorghum,Sorghum 10,SD,3,19950601
+IND002,IS 47396688,Sorghum,bicolor,Sorghum,Sorghum 11,SD,3,19950601
+IND002,IS 47396689,Sorghum,bicolor,Sorghum,Sorghum 12,SD,3,19950601
+IND002,IS 47396690,Sorghum,bicolor,Sorghum,Sorghum 13,SD,3,19950601
+IND002,IS 47396691,Sorghum,bicolor,Sorghum,Sorghum 14,TZ,3,19950601
+IND002,IS 47396692,Sorghum,bicolor,Sorghum,Sorghum 15,SD,3,19950601
+IND002,ICRISAT-CAJ-42415768,Cajanus,cajan,Pigeon pea,Pigeon pea 1,IN,3,19950601
+IND002,ICRISAT-CAJ-42415769,Cajanus,cajan,Pigeon pea,Pigeon pea 2,IN,3,19950601
+IND002,ICRISAT-CAJ-42415771,Cajanus,cajan,Pigeon pea,Pigeon pea 3,IN,3,19950601
+IND002,ICRISAT-CAJ-42415774,Cajanus,cajan,Pigeon pea,Pigeon pea 4,IN,3,19950601
+IND002,ICRISAT-CAJ-42415776,Cajanus,cajan,Pigeon pea,Pigeon pea 5,IN,3,19950601
+IND002,ICRISAT-CAJ-42415779,Cajanus,cajan,Pigeon pea,Pigeon pea 6,IN,3,19950601
+IND002,ICRISAT-CAJ-42415780,Cajanus,cajan,Pigeon pea,Pigeon pea 7,IN,3,19950601
+IND002,ICRISAT-CAJ-42415786,Cajanus,cajan,Pigeon pea,Pigeon pea 8,IN,3,19950601
+IND002,ICRISAT-CAJ-42415787,Cajanus,cajan,Pigeon pea,Pigeon pea 9,IN,3,19950601
+IND002,ICRISAT-CAJ-42415791,Cajanus,cajan,Pigeon pea,Pigeon pea 10,IN,3,19950601
+IND002,ICRISAT-CAJ-42415793,Cajanus,cajan,Pigeon pea,Pigeon pea 11,IN,3,19950601
+IND002,ICRISAT-CAJ-42415794,Cajanus,cajan,Pigeon pea,Pigeon pea 12,IN,3,19950601
+IND002,ICRISAT-CAJ-42415796,Cajanus,cajan,Pigeon pea,Pigeon pea 13,IN,3,19950601
+IND002,ICRISAT-CAJ-42415797,Cajanus,cajan,Pigeon pea,Pigeon pea 14,IN,3,19950601
+IND002,ICRISAT-CAJ-42415799,Cajanus,cajan,Pigeon pea,Pigeon pea 15,IN,3,19950601
+IND002,ICRISAT-CIC-42836222,Cicer,arietinum,Chickpea,Chickpea 1,IN,3,19950601
+IND002,ICRISAT-CIC-42836226,Cicer,arietinum,Chickpea,Chickpea 2,IN,3,19950601
+IND002,ICRISAT-CIC-42836228,Cicer,arietinum,Chickpea,Chickpea 3,IN,3,19950601
+IND002,ICRISAT-CIC-42836230,Cicer,arietinum,Chickpea,Chickpea 4,MX,3,19950601
+IND002,ICRISAT-CIC-42836231,Cicer,arietinum,Chickpea,Chickpea 5,IN,3,19950601
+IND002,ICRISAT-CIC-42836233,Cicer,arietinum,Chickpea,Chickpea 6,IN,3,19950601
+IND002,ICRISAT-CIC-42836236,Cicer,arietinum,Chickpea,Chickpea 7,IN,3,19950601
+IND002,ICRISAT-CIC-42836238,Cicer,arietinum,Chickpea,Chickpea 8,IN,3,19950601
+IND002,ICRISAT-CIC-42836239,Cicer,arietinum,Chickpea,Chickpea 9,IN,3,19950601
+IND002,ICRISAT-CIC-42836240,Cicer,arietinum,Chickpea,Chickpea 10,IN,3,19950601
+IND002,ICRISAT-CIC-42836241,Cicer,arietinum,Chickpea,Chickpea 11,IN,3,19950601
+IND002,ICRISAT-CIC-42836242,Cicer,arietinum,Chickpea,Chickpea 12,IN,3,19950601
+IND002,ICRISAT-CIC-42836243,Cicer,arietinum,Chickpea,Chickpea 13,IN,3,19950601
+IND002,ICRISAT-CIC-42836245,Cicer,arietinum,Chickpea,Chickpea 14,IN,3,19950601
+IND002,ICRISAT-CIC-42836246,Cicer,arietinum,Chickpea,Chickpea 15,MX,3,19950601
+IND002,IND002-VIG-1001,Vigna,unguiculata,Cowpea,Cowpea Landrace 1,IND,3,19910601
+IND002,IND002-VIG-1002,Vigna,unguiculata,Cowpea,Cowpea Landrace 2,IND,3,19920601
+IND002,IND002-VIG-1003,Vigna,unguiculata,Cowpea,Cowpea Landrace 3,IND,3,19930601
+IND002,IND002-VIG-1004,Vigna,unguiculata,Cowpea,Cowpea Landrace 4,IND,3,19940601
+IND002,IND002-VIG-1005,Vigna,unguiculata,Cowpea,Cowpea Landrace 5,IND,3,19950601
+IND002,IND002-VIG-1006,Vigna,unguiculata,Cowpea,Cowpea Landrace 6,IND,3,19960601
+IND002,IND002-VIG-1007,Vigna,unguiculata,Cowpea,Cowpea Landrace 7,IND,3,19970601
+IND002,IND002-VIG-1008,Vigna,unguiculata,Cowpea,Cowpea Landrace 8,IND,3,19900601
+IND002,ICRISAT-ARA-42241047,Arachis,hypogaea,Groundnut,Groundnut 1,BE,3,19950601
+IND002,ICRISAT-ARA-42241049,Arachis,hypogaea,Groundnut,Groundnut 2,IN,3,19950601
+IND002,ICRISAT-ARA-42241051,Arachis,hypogaea,Groundnut,Groundnut 3,IN,3,19950601
+IND002,ICRISAT-ARA-42241052,Arachis,hypogaea,Groundnut,Groundnut 4,IND,3,19950601
+IND002,ICRISAT-ARA-42241053,Arachis,hypogaea,Groundnut,Groundnut 5,PE,3,19950601
+IND002,ICRISAT-ARA-42241055,Arachis,hypogaea,Groundnut,Groundnut 6,PE,3,19950601
+IND002,ICRISAT-ARA-42241057,Arachis,hypogaea,Groundnut,Groundnut 7,PE,3,19950601
+IND002,ICRISAT-ARA-42241058,Arachis,hypogaea,Groundnut,Groundnut 8,PE,3,19950601
+IND002,ICRISAT-ARA-42241060,Arachis,hypogaea,Groundnut,Groundnut 9,PE,3,19950601
+IND002,ICRISAT-ARA-42241062,Arachis,hypogaea,Groundnut,Groundnut 10,PE,3,19950601
+IND002,ICRISAT-ARA-42241063,Arachis,hypogaea,Groundnut,Groundnut 11,PE,3,19950601
+IND002,ICRISAT-ARA-42241065,Arachis,hypogaea,Groundnut,Groundnut 12,PE,3,19950601
+IND002,ICRISAT-ARA-42241066,Arachis,hypogaea,Groundnut,Groundnut 13,PE,3,19950601
+IND002,ICRISAT-ARA-42241068,Arachis,hypogaea,Groundnut,Groundnut 14,PE,3,19950601
+IND002,ICRISAT-ARA-42241070,Arachis,hypogaea,Groundnut,Groundnut 15,IN,3,19950601
+IND002,IND002-SES-1001,Sesamum,indicum,Sesame,Sesame Landrace 1,IND,3,19910601
+IND002,IND002-SES-1002,Sesamum,indicum,Sesame,Sesame Landrace 2,IND,3,19920601
+IND002,IND002-SES-1003,Sesamum,indicum,Sesame,Sesame Landrace 3,IND,3,19930601
+IND002,IND002-SES-1004,Sesamum,indicum,Sesame,Sesame Landrace 4,IND,3,19940601
+IND002,IND002-SES-1005,Sesamum,indicum,Sesame,Sesame Landrace 5,IND,3,19950601
+IND002,IND002-SES-1006,Sesamum,indicum,Sesame,Sesame Landrace 6,IND,3,19960601
+IND002,IND002-SES-1007,Sesamum,indicum,Sesame,Sesame Landrace 7,IND,3,19970601
+IND002,IND002-SES-1008,Sesamum,indicum,Sesame,Sesame Landrace 8,IND,3,19900601
+IND002,IND002-SOL-1001,Solanum,melongena,Brinjal,Brinjal Landrace 1,IND,3,19910601
+IND002,IND002-SOL-1002,Solanum,melongena,Brinjal,Brinjal Landrace 2,IND,3,19920601
+IND002,IND002-SOL-1003,Solanum,melongena,Brinjal,Brinjal Landrace 3,IND,3,19930601
+IND002,IND002-SOL-1004,Solanum,melongena,Brinjal,Brinjal Landrace 4,IND,3,19940601
+IND002,IND002-SOL-1005,Solanum,melongena,Brinjal,Brinjal Landrace 5,IND,3,19950601
+IND002,IND002-SOL-1006,Solanum,melongena,Brinjal,Brinjal Landrace 6,IND,3,19960601
+IND002,IND002-SOL-1007,Solanum,melongena,Brinjal,Brinjal Landrace 7,IND,3,19970601
+IND002,IND002-SOL-1008,Solanum,melongena,Brinjal,Brinjal Landrace 8,IND,3,19900601

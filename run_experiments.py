@@ -27,6 +27,9 @@ import time
 from collections import Counter, defaultdict
 
 from seedsql.db import SeedBankDB, error_category, results_match
+from seedsql.methods import RuleMemory
+from seedsql.perturb import robust_match
+from seedsql.validator import validate
 from seedsql.llm import LLM
 from seedsql.methods import LABELS, run_method
 from seedsql.prompts import BASE_INSTRUCTIONS, BENCH
@@ -40,8 +43,12 @@ def main():
     ap.add_argument("--provider", default="groq")
     ap.add_argument("--model", default=None)
     ap.add_argument("--base-url", default=None)
-    ap.add_argument("--methods", nargs="+", default=["zero", "few", "selfcorr", "textgrad"],
-                    choices=["zero", "few", "selfcorr", "textgrad", "textgrad_lib"])
+    ap.add_argument("--methods", nargs="+", default=["zero", "few", "selfcorr", "textgrad", "vg_textgrad"],
+                    choices=["zero", "few", "selfcorr", "textgrad", "textgrad_lib", "vg_retry", "vg_textgrad_static", "vg_textgrad"],
+                    help="ablations: vg_retry (validator feedback without TextGrad), vg_textgrad_static (no metamorphic tests)")
+    ap.add_argument("--categories", nargs="+", default=None,
+                    help="question categories to run: retrieval aggregation join temporal domain (default: all)")
+    ap.add_argument("--states", type=int, default=5, help="changed database states for temporal robustness accuracy")
     ap.add_argument("--tiers", nargs="+", type=int, default=[1, 2, 3])
     ap.add_argument("--max-iters", type=int, default=4)
     ap.add_argument("--carry", action="store_true",
@@ -55,7 +62,8 @@ def main():
     db = SeedBankDB()
     llm = LLM(args.provider, args.model, temperature=args.temperature, base_url=args.base_url,
               min_interval_s=args.min_interval)
-    qs = [q for q in BENCH["questions"] if q["tier"] in args.tiers]
+    qs = [q for q in BENCH["questions"] if q["tier"] in args.tiers
+          and (not args.categories or q.get("category") in args.categories)]
     for q in qs:
         q["gold"] = db.run(q["gold_sql"])
         assert q["gold"]["ok"], q["id"]
@@ -77,12 +85,13 @@ def main():
         for rep in range(args.repeats):
             for m in args.methods:
                 carried = BASE_INSTRUCTIONS
+                memory = RuleMemory() if (args.carry and m.startswith("vg_textgrad")) else None
                 for q in qs:
                     n += 1
                     try:
                         out = run_method(m, q["question"], llm, db, max_iters=args.max_iters,
                                          initial_instructions=carried if (args.carry and m.startswith("textgrad")) else BASE_INSTRUCTIONS,
-                                         carry=args.carry)
+                                         carry=args.carry, memory=memory)
                     except Exception as e:  # keep going; record the failure
                         print(f"[{n}/{total}] {m:12s} {q['id']}  FAILED: {e}", file=sys.stderr)
                         if "HTTP 401" in str(e) or "HTTP 403" in str(e):
@@ -95,11 +104,15 @@ def main():
                         carried = out["final_instructions"]
                     first, fin = out["iterations"][0]["res"], out["final"]["res"]
                     fc, lc = results_match(q["gold"], first), results_match(q["gold"], fin)
-                    rec = {"rep": rep, "qid": q["id"], "tier": q["tier"], "method": m, "question": q["question"],
-                           "correct": lc, "executed": fin["ok"], "first_correct": fc, "first_executed": first["ok"],
+                    _, robust, _ = robust_match(db, q["gold_sql"], out["final"]["sql"], n_states=args.states, seed=n)
+                    sem = validate(q["question"], out["final"]["sql"], db, res=fin)   # gold-free semantic audit
+                    rec = {"rep": rep, "qid": q["id"], "tier": q["tier"], "category": q.get("category"), "method": m,
+                           "question": q["question"], "correct": lc, "robust": robust, "rule_compliant": sem.ok,
+                           "final_semantic_categories": sem.categories(), "executed": fin["ok"], "first_correct": fc, "first_executed": first["ok"],
                            "iterations": len(out["iterations"]), "calls": out["calls"],
                            "first_error": error_category(first, fc), "final_error": error_category(fin, lc),
                            "final_sql": out["final"]["sql"], "final_instructions": out.get("final_instructions"),
+                           "rule_memory": out.get("memory"),
                            "trace": [{k: v for k, v in it.items() if k != "res"} |
                                      {"ok": it["res"]["ok"], "error": it["res"].get("error"),
                                       "rows": len(it["res"]["values"]) if it["res"]["ok"] else None,
@@ -122,7 +135,8 @@ def main():
 def _agg(rs):
     n = len(rs)
     pct = lambda k: 100.0 * sum(1 for r in rs if r[k]) / n
-    return {"n": n, "execution_accuracy": pct("correct"), "successful_query_rate": pct("executed"),
+    return {"n": n, "execution_accuracy": pct("correct"), "temporal_robust_accuracy": pct("robust"),
+            "rule_compliance": pct("rule_compliant"), "successful_query_rate": pct("executed"),
             "avg_iterations": statistics.mean(r["iterations"] for r in rs),
             "avg_llm_calls": statistics.mean(r["calls"] for r in rs),
             "first_attempt_accuracy": pct("first_correct"),
@@ -135,9 +149,11 @@ def write_summary(records, args, llm, out_dir):
     for r in records:
         groups[(r["method"], r["tier"])].append(r)
         groups[(r["method"], "all")].append(r)
+        groups[(r["method"], "cat:" + str(r.get("category")))].append(r)
+    cats = sorted({str(r.get("category")) for r in records})
     rows = []
     for m in args.methods:
-        for t in ["all"] + sorted(args.tiers):
+        for t in ["all"] + sorted(args.tiers) + ["cat:" + c for c in cats]:
             if groups.get((m, t)):
                 rows.append({"method": LABELS[m], "tier": t} | _agg(groups[(m, t)]))
     with open(os.path.join(out_dir, "summary.csv"), "w", newline="") as f:
@@ -156,12 +172,21 @@ def write_summary(records, args, llm, out_dir):
           f"max iterations: {args.max_iters} · carry prompt: {args.carry}", ""]
     if args.provider == "mock":
         md += ["> **MOCK PROVIDER: pipeline test only, not experimental results.**", ""]
-    md += ["| Method | Tier | n | Exec. accuracy | Successful query rate | Avg. iterations | Avg. LLM calls | First-attempt acc. | Errors first→final |",
-           "|---|---|---|---|---|---|---|---|---|"]
+    md += ["Exec. accuracy = final result matches gold on the benchmark database. Temporal robust accuracy = matches gold on the "
+           "original AND on every changed database state. Rule compliance = no finding from the gold-free validator (for the VG "
+           "methods this is partly circular, because they were optimised against it).", "",
+           "| Method | Tier / category | n | Exec. accuracy | Temporal robust acc. | Rule compliance | Successful query rate | Avg. iterations | Avg. LLM calls | First-attempt acc. | Errors first→final |",
+           "|---|---|---|---|---|---|---|---|---|---|---|"]
     for r in rows:
-        md.append(f"| {r['method']} | {r['tier']} | {r['n']} | {r['execution_accuracy']:.1f}% | "
+        md.append(f"| {r['method']} | {str(r['tier']).replace('cat:', '')} | {r['n']} | {r['execution_accuracy']:.1f}% | "
+                  f"{r['temporal_robust_accuracy']:.1f}% | {r['rule_compliance']:.1f}% | "
                   f"{r['successful_query_rate']:.1f}% | {r['avg_iterations']:.2f} | {r['avg_llm_calls']:.1f} | "
                   f"{r['first_attempt_accuracy']:.1f}% | {r['errors_first']}→{r['errors_final']} |")
+    sem = {m: Counter(c for r in records if r["method"] == m for c in r.get("final_semantic_categories", [])) for m in args.methods}
+    md += ["", "## Remaining semantic issues in final answers (gold-free validator, by category)", "",
+           "| Method | schema | join | temporal | domain | aggregation | execution |", "|---|---|---|---|---|---|---|"]
+    for m in args.methods:
+        md.append(f"| {LABELS[m]} | " + " | ".join(str(sem[m].get(c, 0)) for c in ("schema", "join", "temporal", "domain", "aggregation", "execution")) + " |")
     md += ["", "## Error categories (first attempt → final answer)", "",
            "| Method | " + " | ".join(ERROR_CATS) + " |", "|---|" + "---|" * len(ERROR_CATS)]
     for m in args.methods:
@@ -192,10 +217,11 @@ def make_charts(records, args, err, out_dir):
     except ImportError:
         print("(matplotlib not installed: skipping charts)")
         return
-    colors = {"zero": "#9aa5a0", "few": "#2c5d8f", "selfcorr": "#c9820a", "textgrad": "#1f5c45",
-              "textgrad_lib": "#6a4c93"}
+    colors = {"zero": "#9aa5a0", "few": "#2c5d8f", "selfcorr": "#c9820a", "textgrad": "#5f9e83",
+              "textgrad_lib": "#6a4c93", "vg_retry": "#d9a441", "vg_textgrad_static": "#8c6bb1", "vg_textgrad": "#1f5c45"}
     tiers = sorted(args.tiers)
-    metrics = [("execution_accuracy", "Execution accuracy (%)", 100), ("successful_query_rate", "Successful query rate (%)", 100),
+    metrics = [("execution_accuracy", "Execution accuracy (%)", 100), ("temporal_robust_accuracy", "Temporal robust accuracy (%)", 100),
+               ("successful_query_rate", "Successful query rate (%)", 100),
                ("avg_iterations", "Average generate→execute iterations", None)]
     for key, title, ymax in metrics:
         fig, ax = plt.subplots(figsize=(7.5, 4.2))
@@ -206,7 +232,7 @@ def make_charts(records, args, err, out_dir):
                 rs = [r for r in records if r["method"] == m and r["tier"] == t]
                 vals.append(_agg(rs)[key] if rs else 0)
             xs = [j + (i - (len(args.methods) - 1) / 2) * w for j in range(len(tiers))]
-            bars = ax.bar(xs, vals, w * 0.92, label=LABELS[m], color=colors[m])
+            bars = ax.bar(xs, vals, w * 0.92, label=LABELS[m], color=colors.get(m, "#777"))
             ax.bar_label(bars, fmt="%.0f" if ymax else "%.2f", fontsize=8, padding=2)
         ax.set_xticks(range(len(tiers)), [f"Tier {t}" for t in tiers])
         ax.set_title(title, fontsize=12, fontweight="bold", loc="left")
@@ -217,6 +243,23 @@ def make_charts(records, args, err, out_dir):
         fig.tight_layout()
         fig.savefig(os.path.join(out_dir, "charts", f"{key}.png"), dpi=160)
         plt.close(fig)
+    # execution accuracy by question category
+    cats = sorted({str(r.get("category")) for r in records})
+    fig, ax = plt.subplots(figsize=(max(7.5, 1.4 * len(cats)), 4.2))
+    w = 0.8 / len(args.methods)
+    for i, m in enumerate(args.methods):
+        vals = [_agg([r for r in records if r["method"] == m and str(r.get("category")) == c])["execution_accuracy"]
+                if any(r["method"] == m and str(r.get("category")) == c for r in records) else 0 for c in cats]
+        xs = [j + (i - (len(args.methods) - 1) / 2) * w for j in range(len(cats))]
+        ax.bar(xs, vals, w * 0.92, label=LABELS[m], color=colors.get(m, "#777"))
+    ax.set_xticks(range(len(cats)), cats)
+    ax.set_ylim(0, 110)
+    ax.set_title("Execution accuracy by question category (%)", fontsize=12, fontweight="bold", loc="left")
+    ax.spines[["top", "right"]].set_visible(False)
+    ax.legend(frameon=False, fontsize=8, ncol=min(4, len(args.methods)), loc="upper center", bbox_to_anchor=(0.5, -0.08))
+    fig.tight_layout()
+    fig.savefig(os.path.join(out_dir, "charts", "accuracy_by_category.png"), dpi=160)
+    plt.close(fig)
     # error categories stacked
     labels, data = [], {c: [] for c in ERROR_CATS}
     for m in args.methods:

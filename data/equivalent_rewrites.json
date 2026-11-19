@@ -1,0 +1,53 @@
+{
+  "_comment": "Correct queries written in styles different from the gold SQL (CTEs, window functions, NOT EXISTS, strftime, USING joins). The validator must not flag them; each must match the gold result.",
+  "rewrites": {
+    "T3-01": [
+      "WITH latest AS (SELECT lot_id, MAX(test_date) AS d FROM GerminationTest GROUP BY lot_id) SELECT g.lot_id, g.germination_rate FROM GerminationTest g JOIN latest x ON x.lot_id = g.lot_id AND x.d = g.test_date WHERE g.germination_rate < 75",
+      "SELECT lot_id, germination_rate FROM (SELECT lot_id, germination_rate, ROW_NUMBER() OVER (PARTITION BY lot_id ORDER BY test_date DESC) rn FROM GerminationTest) t WHERE rn = 1 AND germination_rate < 75",
+      "SELECT g.lot_id, g.germination_rate FROM GerminationTest g WHERE NOT EXISTS (SELECT 1 FROM GerminationTest h WHERE h.lot_id = g.lot_id AND h.test_date > g.test_date) AND g.germination_rate < 75"
+    ],
+    "T1-03": [
+      "SELECT test_id, lot_id, test_date, germination_rate FROM GerminationTest WHERE strftime('%Y', test_date) = '2026' AND germination_rate < 75",
+      "SELECT * FROM GerminationTest WHERE test_date BETWEEN '2026-01-01' AND '2026-12-31' AND germination_rate < 75"
+    ],
+    "T2-03": [
+      "SELECT lot_id, SUM(CASE WHEN temperature > 15 OR humidity > 50 THEN 1 ELSE 0 END) AS n FROM StorageLog GROUP BY lot_id ORDER BY n DESC LIMIT 5"
+    ],
+    "DOM-02": [
+      "SELECT l.lot_id FROM SeedLot l WHERE l.quantity > 0 AND (SELECT g.germination_rate FROM GerminationTest g WHERE g.lot_id = l.lot_id ORDER BY g.test_date DESC LIMIT 1) >= 75"
+    ],
+    "T3-02": [
+      "SELECT DISTINCT v.local_name FROM SeedVariety v JOIN SeedLot l USING (variety_id) WHERE v.drought_tolerance = 'High' AND l.quantity > 0 AND (SELECT germination_rate FROM GerminationTest g WHERE g.lot_id = l.lot_id ORDER BY test_date DESC LIMIT 1) >= 75"
+    ],
+    "TMP-07": [
+      "SELECT COUNT(*) FROM (SELECT lot_id, MAX(test_date) d FROM GerminationTest GROUP BY lot_id) x JOIN GerminationTest g ON g.lot_id = x.lot_id AND g.test_date = x.d WHERE g.germination_rate < 75"
+    ],
+    "DOM-09": [
+      "SELECT storage_location, COUNT(*) FROM SeedLot JOIN StorageLog USING (lot_id) WHERE temperature > 15 OR humidity > 50 GROUP BY storage_location"
+    ],
+    "T2-01": [
+      "SELECT storage_location, SUM(quantity) FROM SeedLot GROUP BY 1"
+    ],
+    "TMP-01": [
+      "SELECT lot_id, germination_rate FROM (SELECT lot_id, germination_rate, RANK() OVER (PARTITION BY lot_id ORDER BY test_date DESC) r FROM GerminationTest) WHERE r = 1"
+    ],
+    "TMP-03": [
+      "SELECT lot_id, MAX(test_date) FROM GerminationTest GROUP BY lot_id HAVING MAX(test_date) <= '2023-12-31'"
+    ],
+    "DOM-05": [
+      "SELECT d.lot_id, SUM(d.quantity), (SELECT quantity FROM SeedLot s WHERE s.lot_id = d.lot_id) FROM Distribution d GROUP BY d.lot_id"
+    ],
+    "DOM-07": [
+      "SELECT l.lot_id, l.quantity + t.dist FROM SeedLot l JOIN (SELECT lot_id, SUM(quantity) AS dist FROM Distribution GROUP BY lot_id) t ON t.lot_id = l.lot_id"
+    ],
+    "JN-05": [
+      "SELECT v.local_name FROM SeedVariety v WHERE (SELECT COUNT(DISTINCT storage_location) FROM SeedLot l WHERE l.variety_id = v.variety_id) > 1"
+    ],
+    "TMP-15": [
+      "SELECT g.lot_id, g.test_date FROM GerminationTest g WHERE strftime('%Y', g.test_date) = '2025' AND g.test_date = (SELECT MAX(test_date) FROM GerminationTest x WHERE x.lot_id = g.lot_id)"
+    ],
+    "AGG-06": [
+      "SELECT lot_id, MAX(quantity) FROM SeedLot"
+    ]
+  }
+}

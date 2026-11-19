@@ -310,7 +310,8 @@ StorageLog(log_id INTEGER PK, lot_id INTEGER FK->SeedLot.lot_id, recorded_date T
   -- monthly readings; temperature in deg C, humidity in % relative humidity
 Distribution(distribution_id INTEGER PK, lot_id INTEGER FK->SeedLot.lot_id, destination TEXT, quantity INTEGER, date TEXT)
   -- seed given out to farmer groups; quantity in grams
-Notes: all dates are TEXT 'YYYY-MM-DD'. The database engine is SQLite. Today's date is 2026-11-01."""
+Notes: all dates are TEXT 'YYYY-MM-DD'. The database engine is SQLite. Today's date is 2026-11-01.
+Domain definitions used by this seed bank: a lot needs retesting when its MOST RECENT germination_rate is below 75%; viable stock means a lot with quantity > 0 AND a most recent germination_rate of at least 75%; recommended storage is at most 15 C and at most 50% humidity, so a reading is out of range if temperature > 15 OR humidity > 50; quantity is already net of distributions."""
 
 
 def check_benchmark(con, bench):

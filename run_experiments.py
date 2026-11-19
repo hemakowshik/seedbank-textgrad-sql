@@ -53,7 +53,8 @@ def main():
     ap.add_argument("--max-iters", type=int, default=4)
     ap.add_argument("--carry", action="store_true",
                     help="prompt-level optimisation: carry TextGrad's optimised prompt across questions")
-    ap.add_argument("--repeats", type=int, default=1)
+    ap.add_argument("--repeats", type=int, default=1,
+                    help="run every method N times; use 3 for the paper so run-to-run variance can be reported")
     ap.add_argument("--temperature", type=float, default=0.0)
     ap.add_argument("--min-interval", type=float, default=0.0, help="seconds between LLM calls (rate limits)")
     ap.add_argument("--out", default="results")
@@ -106,7 +107,7 @@ def main():
                     fc, lc = results_match(q["gold"], first), results_match(q["gold"], fin)
                     _, robust, _ = robust_match(db, q["gold_sql"], out["final"]["sql"], n_states=args.states, seed=n)
                     sem = validate(q["question"], out["final"]["sql"], db, res=fin)   # gold-free semantic audit
-                    rec = {"rep": rep, "qid": q["id"], "tier": q["tier"], "category": q.get("category"), "method": m,
+                    rec = {"rep": rep, "qid": q["id"], "tier": q["tier"], "category": q.get("category"), "method": m, "model": llm.model,
                            "question": q["question"], "correct": lc, "robust": robust, "rule_compliant": sem.ok,
                            "final_semantic_categories": sem.categories(), "executed": fin["ok"], "first_correct": fc, "first_executed": first["ok"],
                            "iterations": len(out["iterations"]), "calls": out["calls"],
@@ -128,7 +129,18 @@ def main():
     if not records:
         print("\nNo successful runs - nothing to summarise. Fix the error above and rerun.")
         return
+    # record the model(s) actually used, including any automatic fallback switch
+    cfg_path = os.path.join(out_dir, "config.json")
+    cfg = json.load(open(cfg_path))
+    cfg |= {"model_final": llm.model, "model_switches": getattr(llm, "model_switches", []),
+            "models_used": sorted({r["model"] for r in records}), "llm_calls_total": llm.calls}
+    json.dump(cfg, open(cfg_path, "w"), indent=2)
     write_summary(records, args, llm, out_dir)
+    try:
+        from analyze_results import analyze
+        analyze(out_dir)               # paired McNemar tests, confidence intervals, paper-ready tables
+    except Exception as e:             # statistics must never lose a finished run
+        print(f"(statistics step skipped: {e})")
     print(f"\nDone. {llm.calls} LLM calls. Results in {out_dir}/")
 
 

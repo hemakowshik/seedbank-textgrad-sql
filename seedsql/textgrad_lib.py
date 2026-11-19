@@ -8,6 +8,9 @@
 Execution feedback from SQLite enters the graph as a constant Variable, so the gradient flows from
 the loss -> SQL answer -> system prompt.
 
+Status: EXPERIMENTAL. This adapter has not been run end to end in this project, so no result in the
+paper comes from it. All reported TextGrad numbers use the re-implementation in methods.py.
+
 Notes
 - Tested against the textgrad 0.1.x API (Variable, BlackboxLLM, TGD, autograd.FormattedLLMCall,
   engine.local_model_openai_api.ChatExternalClient). If your installed version differs, run the

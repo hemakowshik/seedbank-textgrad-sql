@@ -74,6 +74,7 @@ class LLM:
         self.provider = provider
         self.calls = 0
         self.prompt_chars = 0
+        self.model_switches = []   # [(call number, old model, new model)] - written to config.json
         if provider == "mock":
             self.model = "mock"
             return
@@ -138,6 +139,7 @@ class LLM:
                     new = self._pick_available_model()
                     if new and new != self.model:
                         print(f"[llm] model '{self.model}' is not available; switching to '{new}'")
+                        self.model_switches.append({"call": self.calls, "from": self.model, "to": new})
                         self.model, switched = new, True
                         continue
                 if e.code in (429, 500, 502, 503, 529) and attempt < 5:

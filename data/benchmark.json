@@ -17,8 +17,8 @@
       "sql": "SELECT storage_location, COUNT(*) AS lot_count FROM SeedLot GROUP BY storage_location;"
     },
     {
-      "question": "What is the most recent germination rate of each seed lot?",
-      "sql": "SELECT g.lot_id, g.germination_rate FROM GerminationTest g WHERE g.test_date = (SELECT MAX(g2.test_date) FROM GerminationTest g2 WHERE g2.lot_id = g.lot_id);"
+      "question": "What is the most recent storage temperature recorded for each seed lot?",
+      "sql": "SELECT s.lot_id, s.temperature FROM StorageLog s WHERE s.recorded_date = (SELECT MAX(s2.recorded_date) FROM StorageLog s2 WHERE s2.lot_id = s.lot_id);"
     },
     {
       "question": "Which varieties have never been distributed?",

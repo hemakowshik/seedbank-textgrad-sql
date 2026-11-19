@@ -66,6 +66,19 @@ def test_robustness_metric():
         assert robust_match(db, q["gold_sql"], q["gold_sql"], n_states=2, seed=1) == (True, True, 2), q["id"]
 
 
+def test_few_shot_examples_do_not_leak_benchmark_answers():
+    """A demonstration must not be (a paraphrase of) a test question, or few-shot accuracy is inflated."""
+    import re
+    norm = lambda s: re.sub(r"\s+", " ", s.lower().strip().rstrip(";"))
+    words = lambda s: set(re.findall(r"\w+", s.lower()))
+    for e in BENCH["few_shot_examples"]:
+        for q in BENCH["questions"]:
+            assert norm(e["sql"]) != norm(q["gold_sql"]), (q["id"], e["question"])
+            a, b = words(e["question"]), words(q["question"])
+            assert len(a & b) / len(a | b) < 0.6, (q["id"], e["question"])
+        assert db.run(e["sql"])["ok"], e["question"]
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

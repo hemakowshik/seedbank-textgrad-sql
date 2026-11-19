@@ -22,7 +22,7 @@ from .validator import format_findings, validate
 
 METHODS = ["zero", "few", "selfcorr", "textgrad", "vg_retry", "vg_textgrad_static", "vg_textgrad"]
 LABELS = {"zero": "Zero-shot", "few": "Few-shot", "selfcorr": "Error-retry", "textgrad": "TextGrad",
-          "textgrad_lib": "TextGrad (library)", "vg_retry": "Validator-retry", "vg_textgrad_static": "VG-TextGrad (static)",
+          "textgrad_lib": "TextGrad (library, experimental)", "vg_retry": "Validator-retry", "vg_textgrad_static": "VG-TextGrad (static)",
           "vg_textgrad": "VG-TextGrad"}
 
 

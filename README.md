@@ -42,6 +42,7 @@ Full rationale, research questions and positioning: [`docs/RESEARCH_DIRECTION.md
 | `seedsql/mutants.py` | Injected semantic mistakes for evaluating the validator |
 | `eval_validator.py` | Offline validator evaluation (no API key) → `results/validator_eval/` |
 | `run_experiments.py` | LLM experiments → `results/<run>/summary.md`, `summary.csv`, `records.jsonl`, `charts/` |
+| `analyze_results.py` | 95% confidence intervals, variance over repeats, paired McNemar tests → `results/<run>/stats.md` |
 | `app.py` | Local web platform with the validator (`/api/validate`) |
 | `ask.py` | One question in the terminal with the full trace |
 | `tests/` | Offline tests (`test_eval.py`, `test_validator.py`) |
@@ -69,6 +70,20 @@ python run_experiments.py --provider groq --methods vg_retry vg_textgrad_static 
 python run_experiments.py --provider groq --methods textgrad vg_textgrad --carry
 ```
 
+## Producing the results for the paper
+
+Run every method three times so run-to-run variance can be reported:
+```cmd
+python run_experiments.py --provider groq --methods zero few selfcorr textgrad vg_retry vg_textgrad_static vg_textgrad --repeats 3 --min-interval 2
+```
+The run folder then contains `summary.md` (tables), `stats.md` (95% confidence intervals, mean ± sd over
+repeats, exact McNemar tests with Holm correction), `charts/`, `records.jsonl` (every prompt, SQL and
+gradient) and `config.json`, which records the model actually used and any automatic model switch.
+To recompute the statistics later: `python analyze_results.py results/<run_id>`.
+
+Free API tiers have daily request limits; if a run stops, rerun a subset with `--methods` or `--categories`.
+`textgrad_lib` (the official `textgrad` package adapter) is **experimental** and was not used for any reported number.
+
 ## Metrics
 
 | Metric | Meaning |
@@ -85,7 +100,7 @@ python run_experiments.py --provider groq --methods textgrad vg_textgrad --carry
 0 false alarms on 60 gold queries and 18 correct rewrites; 105 of 105 wrong-but-executing mutants detected
 across 12 mistake types. **These are development-set figures**: the rules were refined on this benchmark,
 so an independent held-out question set is needed before reporting them. LLM experiments have not been
-run yet. See [`docs/validator_eval_summary.md`](docs/validator_eval_summary.md).
+run yet (the two old folders in `results/` are a mock pipeline test and a failed run blocked by HTTP 403; neither is a result). See [`docs/validator_eval_summary.md`](docs/validator_eval_summary.md).
 
 ## Data honesty
 
@@ -94,6 +109,7 @@ run yet. See [`docs/validator_eval_summary.md`](docs/validator_eval_summary.md).
 - Drought tolerance is assigned by a crop-level rule. Thresholds (75% germination, 15 °C, 50% RH) are demonstration assumptions.
 - `DATASET/icrisat_ind002_accessions.csv` (added in an earlier commit) **could not be verified**: none of its 144 accession numbers appear in ICRISAT's Genesys list. It is not used by the build.
 - `SeedSQL_Complete_Project_Guide.pdf` describes the earlier 18-question version.
+- The few-shot demonstrations share no question or gold SQL with the benchmark (checked by `tests/test_validator.py`).
 
 ## References
 

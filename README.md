@@ -43,6 +43,8 @@ Full rationale, research questions and positioning: [`docs/RESEARCH_DIRECTION.md
 | `eval_validator.py` | Offline validator evaluation (no API key) → `results/validator_eval/` |
 | `run_experiments.py` | LLM experiments → `results/<run>/summary.md`, `summary.csv`, `records.jsonl`, `charts/` |
 | `analyze_results.py` | 95% confidence intervals, variance over repeats, paired McNemar tests → `results/<run>/stats.md` |
+| `docs/paper/` | IEEE paper for this version (`SeedSQL_IEEE_Paper_v2.docx`/`.pdf`); rebuild with `node build.js` (figures: `python figs.py`) |
+| `eval_robustness.py` | Offline check: wrong queries that match gold on one database state → `results/robustness_eval/` |
 | `app.py` | Local web platform with the validator (`/api/validate`) |
 | `ask.py` | One question in the terminal with the full trace |
 | `tests/` | Offline tests (`test_eval.py`, `test_validator.py`) |

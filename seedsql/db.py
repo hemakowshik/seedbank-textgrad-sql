@@ -9,11 +9,24 @@ DB_PATH = os.path.join(_ROOT, "data", "seedbank.db")
 
 
 class SeedBankDB:
-    def __init__(self, path=DB_PATH):
+    def __init__(self, path=DB_PATH, con=None):
+        if con is not None:          # wrap an existing (e.g. in-memory, perturbed) connection
+            self.con = con
+            return
         if not os.path.exists(path):
             raise FileNotFoundError(f"{path} not found - run: python data/build_database.py")
         # read-only connection (safe execution)
         self.con = sqlite3.connect(f"file:{path}?mode=ro", uri=True, check_same_thread=False)
+        self.con.execute("PRAGMA query_only = ON")
+
+    def clone(self):
+        """Writable in-memory copy for controlled state changes (perturbation tests).
+        Returns (writable_connection, SeedBankDB-wrapper). Call .freeze() before running model SQL."""
+        mem = sqlite3.connect(":memory:", check_same_thread=False)
+        self.con.backup(mem)
+        return mem, SeedBankDB(con=mem)
+
+    def freeze(self):
         self.con.execute("PRAGMA query_only = ON")
 
     def run(self, sql, max_rows=5000, timeout_s=10.0):

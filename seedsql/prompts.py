@@ -11,7 +11,7 @@ _DEFAULT_SCHEMA_TEXT = """SeedVariety(variety_id INTEGER PK, crop_name TEXT, loc
   -- drought_tolerance values: 'High','Medium','Low'
 SeedLot(lot_id INTEGER PK, variety_id INTEGER FK->SeedVariety.variety_id, storage_location TEXT, quantity INTEGER, collection_date TEXT)
   -- storage_location values: 'Cold Room A','Cold Room B','Clay Pot Store','Ambient Shelf','Village Hub - Mandya'
-  -- quantity = grams currently in stock (0 means exhausted)
+  -- quantity = grams currently in stock, already AFTER all distributions (0 means exhausted)
 GerminationTest(test_id INTEGER PK, lot_id INTEGER FK->SeedLot.lot_id, test_date TEXT, germination_rate REAL)
   -- germination_rate is a percentage 0-100; a lot can have several tests over time
 StorageLog(log_id INTEGER PK, lot_id INTEGER FK->SeedLot.lot_id, recorded_date TEXT, temperature REAL, humidity REAL)
@@ -136,3 +136,36 @@ def retry_prompt(question, prev_sql, res):
     return (generator_prompt(BASE_INSTRUCTIONS, question, False) +
             f"\n\nYour previous query was:\n```sql\n{prev_sql}\n```\n"
             f"It failed with this SQLite error: {res['error'] if res else 'no SQL produced'}\nWrite a corrected query.")
+
+
+# ------------------------------------------------------------------ validation-guided TextGrad (VG-TextGrad)
+def vg_loss_prompt(question, sql, res, findings_text):
+    """Evaluator prompt grounded in the domain/temporal validator's evidence (still no gold answer)."""
+    return loss_prompt(question, sql, res).replace(
+        "List concrete problems as short bullets",
+        "An automatic domain and temporal validator (no access to the correct answer) produced this evidence. "
+        "Its metamorphic tests changed the database in a controlled way and re-ran the SQL; treat failed tests as "
+        "strong evidence of a semantic error.\n<VALIDATION_FINDINGS>\n" + findings_text + "\n</VALIDATION_FINDINGS>\n"
+        "List concrete problems as short bullets")
+
+
+def vg_gradient_prompt(instructions, question, sql, res, loss, findings_text, carry=False):
+    """Typed textual gradient: one targeted instruction per validated error category."""
+    scope = ("Write each instruction as a general rule that will help on OTHER questions; never mention specific "
+             "lot ids, accession names or values from the evidence." if carry else
+             "Instructions may be specific to this question.")
+    return gradient_prompt(instructions, question, sql, res, loss).replace(
+        "Explain how the VARIABLE should be changed",
+        "The domain and temporal validator found these errors (each is tagged with its rule id):\n"
+        "<VALIDATION_FINDINGS>\n" + findings_text + "\n</VALIDATION_FINDINGS>\n\n"
+        "Explain how the VARIABLE should be changed").replace(
+        "give the feedback only, as at most 6 bullets.",
+        "give the feedback only. Write one bullet per validated error, starting with its rule id in square brackets, "
+        "e.g. '- [TEMP-LATEST] ...'. Add at most two further bullets for problems the evaluator found. " + scope)
+
+
+def vg_retry_prompt(question, prev_sql, findings_text):
+    """Ablation: feed the validator's findings straight back to the generator (no evaluator, no TextGrad)."""
+    return (generator_prompt(BASE_INSTRUCTIONS, question, False) +
+            f"\n\nYour previous query was:\n```sql\n{prev_sql}\n```\nAn automatic validator found these problems:\n"
+            f"{findings_text}\nWrite a corrected query.")

@@ -40,6 +40,13 @@ def on_iter(it):
     print(f"{C['c']}[forward] SQL:{C['x']}\n" + textwrap.indent(it["sql"] or "(none)", "  "))
     print(f"{C['g']}[execute]{C['x']}")
     show_table(it["res"], 8)
+    if it.get("validation"):
+        v = it["validation"]
+        print(f"{C['m']}[validator] {v['tests_run']} metamorphic test(s){C['x']}")
+        for f in v["findings"] or []:
+            print(f"  - [{f['category']}/{f['rule']}/{f['source']}] {f['evidence']}")
+        if not v["findings"]:
+            print("  no rule violations")
     if it.get("loss"):
         print(f"{C['r']}[loss] {it.get('verdict', '')}{C['x']}\n" + textwrap.indent(it["loss"].strip(), "  "))
     if it.get("gradient"):
@@ -51,7 +58,7 @@ def on_iter(it):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("question")
-    ap.add_argument("--method", default="textgrad", choices=["zero", "few", "selfcorr", "textgrad", "textgrad_lib"])
+    ap.add_argument("--method", default="textgrad", choices=["zero", "few", "selfcorr", "textgrad", "textgrad_lib", "vg_retry", "vg_textgrad_static", "vg_textgrad"])
     ap.add_argument("--provider", default="groq")
     ap.add_argument("--model", default=None)
     ap.add_argument("--max-iters", type=int, default=4)

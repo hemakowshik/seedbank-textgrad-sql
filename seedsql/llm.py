@@ -93,8 +93,8 @@ class LLM:
         self.api_key = _clean_key(api_key) if key_env else "ollama"
         self.key_env = key_env
         if key_env and not _is_real_key(self.api_key):
-            raise RuntimeError(f"No API key found for '{provider}'. Put the line  {key_env}=your_key  in a file named .env "
-                               f"in the project folder, or run:  set {key_env}=your_key  (no spaces, no quotes).")
+            raise RuntimeError(f"No API key found for '{provider}'. Open the .env file in the project folder (notepad .env) "
+                               f"and add the line {key_env}= followed directly by your real key (it starts with gsk_ for Groq).")
         self.model = model or default_model
         self.temperature = temperature
         self.max_tokens = max_tokens
@@ -202,26 +202,34 @@ class LLM:
 
 # ---------------------------------------------------------------- mock model (offline testing only)
 def _mock_response(prompt, n):
-    """Deterministic fake model: first attempts at hard questions are deliberately broken so that the
-    refinement code paths (errors, loss, gradient, step) are exercised. Used ONLY to test the pipeline."""
+    """Deterministic fake model used ONLY to test the pipeline (numbers it produces are meaningless).
+    Unrefined attempts at hard questions return a query that RUNS but is semantically wrong (an injected
+    mutation) when one exists, otherwise a query with an unknown column; refined attempts return the gold."""
     from .prompts import BENCH
     if "<IMPROVED_VARIABLE>" in prompt and "textual gradient descent" in prompt:
         var = re.search(r"<VARIABLE>\n([\s\S]*?)\n</VARIABLE>", prompt).group(1)
         return f"<IMPROVED_VARIABLE>{var}\nAlways compute 'most recent' per lot with a correlated MAX(test_date) subquery and use exact stored values.</IMPROVED_VARIABLE>"
     if "computing textual gradients" in prompt:
+        if "<VALIDATION_FINDINGS>" in prompt:
+            rules = sorted(set(re.findall(r"/ ([A-Z]+-[A-Z]+) /", prompt))) or ["SCHEMA"]
+            return "\n".join(f"- [{r}] Always apply the rule {r} as the validator describes." for r in rules)
         return "- The prompt should remind the model to use only existing column names and per-lot MAX(test_date)."
     if "strict reviewer" in prompt:
+        if "<VALIDATION_FINDINGS>" in prompt and not re.search(r"<VALIDATION_FINDINGS>\nNo rule violations", prompt):
+            return "- The validator reports semantic errors.\nVERDICT: FAIL"
         return "- Execution failed.\nVERDICT: FAIL" if "status: ERROR" in prompt else "No problems found.\nVERDICT: PASS"
     if "coordinator" in prompt:
         return "Mock summary."
     q = re.search(r"### Question\n([\s\S]*?)\n\nRespond", prompt)
     q = q.group(1).strip() if q else ""
     gold = next((x for x in BENCH["questions"] if x["question"] == q), None)
-    refined = "Always compute 'most recent'" in prompt or "Your previous query" in prompt
+    refined = "Always compute 'most recent'" in prompt or "Your previous query" in prompt or "Lessons learned" in prompt
     if gold is None:
         return "```sql\nSELECT 1;\n```"
     if gold["tier"] == 3 and not refined:
-        return "```sql\nSELECT lot_id, germination_score FROM GerminationTest;\n```"  # unknown column
+        from .mutants import mutants
+        wrong = next((m for _, _, m in mutants(gold["gold_sql"])), None)
+        return f"```sql\n{wrong}\n```" if wrong else "```sql\nSELECT lot_id, germination_score FROM GerminationTest;\n```"
     if gold["tier"] == 2 and "### Examples" not in prompt and gold["id"] in ("T2-02", "T2-03"):
         return "```sql\nSELECT lot_id FROM StorageLog LIMIT 3;\n```"  # wrong result
     return f"```sql\n{gold['gold_sql']}\n```"

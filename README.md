@@ -57,7 +57,7 @@ python run_experiments.py --provider openai --methods zero few textgrad textgrad
 python run_experiments.py --provider groq --methods textgrad --carry   # prompt-level optimisation
 ```
 
-Smaller models make more SQL mistakes, which leaves room to measure refinement. A very strong model may score
+Smaller models (Groq default: openai/gpt-oss-20b) make more SQL mistakes, which leaves room to measure refinement. A very strong model may score
 near 100% zero-shot, and that is also a valid finding to report.
 
 ## Methods compared

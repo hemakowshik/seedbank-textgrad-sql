@@ -83,6 +83,12 @@ def main():
         llm = LLM(a.provider, a.model, base_url=a.base_url, min_interval_s=a.min_interval)
     except Exception as e:
         sys.exit(f"Could not start: {e}")
+    print(f"Checking the {llm.provider} API key ...")
+    problem = llm.check()
+    if problem:
+        print("\n" + problem + "\n")
+        sys.exit(1)
+    print("API key OK.")
     srv = ThreadingHTTPServer(("127.0.0.1", a.port), make_handler(llm))
     url = f"http://localhost:{a.port}/"
     print(f"SeedSQL running at {url}   (LLM: {llm.provider} / {llm.model})")

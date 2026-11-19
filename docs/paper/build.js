@@ -1,381 +1,441 @@
-// Builds the IEEE-style paper for SeedSQL v2 (two-column, US Letter, Times New Roman).
+// Builds SeedSQL paper v2 in the layout of the team's earlier draft (single column, Calibri).
 const fs = require("fs");
 const {
   Document, Packer, Paragraph, TextRun, ImageRun, Table, TableRow, TableCell, AlignmentType, WidthType,
-  BorderStyle, ShadingType, SectionType, TabStopType, VerticalAlign, LineRuleType,
+  BorderStyle, ShadingType, TabStopType, VerticalAlign, Footer, PageNumber, LevelFormat, HeadingLevel,
 } = require("docx");
 
-const FONT = "Times New Roman";
-const COL = 5040;            // one column, DXA (3.5 in)
-const PT = (n) => n * 2;     // half-points
+const FONT = "Calibri", INK = "1F1E1D", GREY = "5E5D59";
+const W = 10078;                       // text width (Letter, draft margins)
 
-// ---------- inline markup: **bold**, *italic*, _{sub}, ^{sup}, `code`
-function runs(text, base = {}) {
-  const out = [];
-  const re = /(\*\*[^*]+\*\*|\*[^*]+\*|_\{[^}]+\}|\^\{[^}]+\}|`[^`]+`)/g;
+function runs(text, base = {}) {      // *italic*, _{sub}, ^{sup}, `code`
+  const out = [], re = /(\*[^*]+\*|_\{[^}]+\}|\^\{[^}]+\}|`[^`]+`)/g;
   let last = 0, m;
-  const push = (t, extra = {}) => { if (t) out.push(new TextRun({ text: t, font: FONT, size: base.size || PT(10), ...base, ...extra })); };
+  const push = (t, x = {}) => { if (t) out.push(new TextRun({ text: t, font: FONT, color: INK, ...base, ...x })); };
   while ((m = re.exec(text))) {
     push(text.slice(last, m.index));
-    const tok = m[0];
-    if (tok.startsWith("**")) push(tok.slice(2, -2), { bold: true });
-    else if (tok.startsWith("*")) push(tok.slice(1, -1), { italics: true });
-    else if (tok.startsWith("_{")) push(tok.slice(2, -1), { subScript: true, italics: base.italics });
-    else if (tok.startsWith("^{")) push(tok.slice(2, -1), { superScript: true });
-    else push(tok.slice(1, -1), { font: "Courier New", size: PT(8.5) });
-    last = m.index + tok.length;
+    const t = m[0];
+    if (t[0] === "*") push(t.slice(1, -1), { italics: true });
+    else if (t[0] === "_") push(t.slice(2, -1), { subScript: true });
+    else if (t[0] === "^") push(t.slice(2, -1), { superScript: true });
+    else push(t.slice(1, -1), { font: "Courier New", size: 20 });
+    last = m.index + t.length;
   }
   push(text.slice(last));
   return out;
 }
+const P = (t, o = {}) => new Paragraph({ children: o.children || runs(t, o.run), spacing: { after: o.after ?? 150, line: 295 },
+  alignment: o.align, keepNext: o.keepNext });
+const lead = (label, t) => new Paragraph({ children: [new TextRun({ text: label + " ", font: FONT, bold: true, color: INK }), ...runs(t)],
+  spacing: { after: 150, line: 295 } });
+const H1 = (t) => new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun({ text: t, font: FONT, color: INK })],
+  spacing: { before: 360, after: 120 } });
+const H2 = (t) => new Paragraph({ heading: HeadingLevel.HEADING_2, children: [new TextRun({ text: t, font: FONT, color: INK })],
+  spacing: { before: 200, after: 120 } });
+const NUM = (t, ref = "num", level = 0) => new Paragraph({ numbering: { reference: ref, level }, children: runs(t),
+  spacing: { after: 80, line: 295 } });
+const BUL = (t) => new Paragraph({ numbering: { reference: "bul", level: 0 }, children: runs(t), spacing: { after: 80, line: 295 } });
 
-const P = (text, opt = {}) => new Paragraph({
-  children: runs(text, opt.run || {}),
-  alignment: opt.align || AlignmentType.JUSTIFIED,
-  indent: opt.noIndent ? undefined : { firstLine: 202 },
-  spacing: { before: 0, after: opt.after || 0, line: 240 },
-  keepNext: opt.keepNext,
-});
-const P0 = (text, opt = {}) => P(text, { ...opt, noIndent: true });
-
-let h1n = 0, h2n = 0;
-const ROMAN = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
-const H1 = (t) => { h2n = 0; return new Paragraph({
-  children: [new TextRun({ text: `${ROMAN[h1n++]}. ${t}`, font: FONT, size: PT(10), smallCaps: true })],
-  alignment: AlignmentType.CENTER, spacing: { before: 200, after: 100 }, keepNext: true, keepLines: true }); };
-const H2 = (t) => new Paragraph({
-  children: [new TextRun({ text: `${String.fromCharCode(65 + h2n++)}. ${t}`, font: FONT, size: PT(10), italics: true })],
-  spacing: { before: 100, after: 60 }, keepNext: true, keepLines: true });
-
-// bullet-like paragraph with hanging indent, label given explicitly (no literal bullet glyphs)
-const Item = (label, text) => new Paragraph({
-  children: [new TextRun({ text: label + "\t", font: FONT, size: PT(10) }), ...runs(text)],
-  alignment: AlignmentType.JUSTIFIED, indent: { left: 288, hanging: 288 },
-  tabStops: [{ type: TabStopType.LEFT, position: 288 }], spacing: { before: 0, after: 30 } });
-
-// display equation with right-aligned number
-const EQ = (parts, num) => new Paragraph({
-  children: [new TextRun({ text: "\t", font: FONT }), ...runs(parts, { italics: false }),
-             new TextRun({ text: `\t(${num})`, font: FONT, size: PT(10) })],
-  tabStops: [{ type: TabStopType.CENTER, position: COL / 2 }, { type: TabStopType.RIGHT, position: COL }],
-  spacing: { before: 80, after: 80 } });
-
-// SQL / code block
+const shade = { type: ShadingType.CLEAR, color: "auto", fill: "F3F3F3" };
 const CODE = (lines) => lines.map((l, i) => new Paragraph({
-  children: [new TextRun({ text: l, font: "Courier New", size: PT(7.5) })],
-  shading: { type: ShadingType.CLEAR, color: "auto", fill: "F2F2F2" },
-  spacing: { before: i === 0 ? 60 : 0, after: i === lines.length - 1 ? 60 : 0, line: 220, lineRule: LineRuleType.AUTO },
-  keepNext: i < lines.length - 1, indent: { left: 72, right: 72 } }));
+  children: [new TextRun({ text: l || " ", font: "Courier New", size: 19, color: INK })],
+  shading: shade, indent: { left: 140, right: 140 }, keepNext: i < lines.length - 1,
+  spacing: { before: i === 0 ? 120 : 0, after: i === lines.length - 1 ? 200 : 0, line: 250 } }));
+const EQ = (t, n) => new Paragraph({
+  children: [new TextRun({ text: "\t" }), ...runs(t, { font: "Cambria Math" }), new TextRun({ text: `\t(${n})`, font: FONT, color: INK })],
+  tabStops: [{ type: TabStopType.CENTER, position: W / 2 }, { type: TabStopType.RIGHT, position: W }],
+  spacing: { before: 100, after: 160 } });
 
-const caption = (text, above = true) => new Paragraph({
-  children: runs(text, { size: PT(8) }), alignment: AlignmentType.CENTER,
-  spacing: { before: above ? 120 : 40, after: above ? 60 : 140 }, keepNext: above });
-const tcaption = (num, text) => [
-  new Paragraph({ children: [new TextRun({ text: `TABLE ${num}`, font: FONT, size: PT(8) })], alignment: AlignmentType.CENTER, spacing: { before: 140, after: 0 }, keepNext: true }),
-  new Paragraph({ children: [new TextRun({ text, font: FONT, size: PT(8), smallCaps: true })], alignment: AlignmentType.CENTER, spacing: { before: 0, after: 60 }, keepNext: true }),
-];
-
-const thin = { style: BorderStyle.SINGLE, size: 4, color: "000000" };
-const none = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" };
+const border = { style: BorderStyle.SINGLE, size: 6, color: "E8E5DC" };
+const borders = { top: border, bottom: border, left: border, right: border };
 function TABLE(widths, rows, opt = {}) {
-  return [TABLE0(widths, rows, opt), new Paragraph({ children: [], spacing: { before: 0, after: 80, line: 120 } })];
-}
-function TABLE0(widths, rows, opt = {}) {
-  const total = widths.reduce((a, b) => a + b, 0);
+  const scale = W / widths.reduce((a, b) => a + b, 0);
+  const ws = widths.map((w) => Math.round(w * scale));
+  ws[ws.length - 1] += W - ws.reduce((a, b) => a + b, 0);
   return new Table({
-    width: { size: total, type: WidthType.DXA }, columnWidths: widths, alignment: AlignmentType.CENTER,
-    borders: { top: thin, bottom: thin, left: none, right: none, insideHorizontal: none, insideVertical: none },
-    rows: rows.map((r, ri) => new TableRow({
-      cantSplit: true, tableHeader: ri === 0,
+    width: { size: W, type: WidthType.DXA }, columnWidths: ws,
+    rows: rows.map((r, ri) => new TableRow({ tableHeader: ri === 0, cantSplit: true,
       children: r.map((c, ci) => new TableCell({
-        width: { size: widths[ci], type: WidthType.DXA }, verticalAlign: VerticalAlign.CENTER,
-        margins: { top: 20, bottom: 20, left: 50, right: 50 },
-        borders: ri === 0 ? { bottom: thin, top: thin, left: none, right: none } : { top: none, bottom: ri === rows.length - 1 ? thin : none, left: none, right: none },
-        shading: opt.highlight && opt.highlight(ri) ? { type: ShadingType.CLEAR, color: "auto", fill: "EEF3EE" } : undefined,
-        children: [new Paragraph({
-          children: runs(String(c), { size: PT(opt.size || 7.5), bold: ri === 0 }),
-          alignment: (opt.align && opt.align[ci]) || (ci === 0 ? AlignmentType.LEFT : AlignmentType.CENTER),
-          keepNext: ri < rows.length - 1, spacing: { before: 0, after: 0, line: 220 } })],
-      })),
-    })),
-  });
+        width: { size: ws[ci], type: WidthType.DXA }, borders, verticalAlign: VerticalAlign.CENTER,
+        shading: ri === 0 ? shade : undefined, margins: { top: 80, bottom: 80, left: 120, right: 120 },
+        children: [new Paragraph({ children: runs(String(c), { size: 21, color: ri === 0 ? "555450" : INK }),
+          alignment: opt.center && opt.center.includes(ci) ? AlignmentType.CENTER : AlignmentType.LEFT,
+          keepNext: ri === 0, spacing: { after: 0, line: 260 } })] })) })) });
 }
+const TCAP = (label, t) => new Paragraph({ children: [new TextRun({ text: label + " ", font: FONT, bold: true, color: INK }), ...runs(t)],
+  spacing: { before: 120, after: 120 }, keepNext: true });
+const AFTER = () => new Paragraph({ children: [], spacing: { after: 120 } });
+const IMG = (f, w, h) => new Paragraph({ children: [new ImageRun({ type: "png", data: fs.readFileSync(f),
+  transformation: { width: w, height: h }, altText: { title: f, description: f, name: f } })], spacing: { before: 120, after: 80 },
+  keepNext: true, alignment: AlignmentType.CENTER });
+const FCAP = (t) => new Paragraph({ children: [new TextRun({ text: t, font: FONT, size: 19, color: GREY })], spacing: { after: 220 } });
 
-const IMG = (file, wpx, hpx) => new Paragraph({
-  children: [new ImageRun({ type: "png", data: fs.readFileSync(file), transformation: { width: wpx, height: hpx },
-    altText: { title: file, description: file, name: file } })],
-  alignment: AlignmentType.CENTER, spacing: { before: 120, after: 0 }, keepNext: true });
+// ============================================================================================ content
+const C = [];
+const add = (...x) => x.flat().forEach((e) => C.push(e));
 
-// ====================================================================== content
-const title = [
-  new Paragraph({ children: [new TextRun({ text: "Validation-Guided TextGrad for Seed-Bank Text-to-SQL: Catching Queries That Run but Give the Wrong Answer", font: FONT, size: PT(22) })],
-    alignment: AlignmentType.CENTER, spacing: { before: 0, after: 200 } }),
-  new Paragraph({ children: [new TextRun({ text: "Gayathri Priya V, Gonu Guntla Hema Kowshik, Bhavin G Kamat", font: FONT, size: PT(11) })], alignment: AlignmentType.CENTER, spacing: { after: 40 } }),
-  new Paragraph({ children: [new TextRun({ text: "Department of Computer Science and Engineering (AI & ML), PES University, Bengaluru, India", font: FONT, size: PT(10), italics: true })], alignment: AlignmentType.CENTER, spacing: { after: 40 } }),
-  new Paragraph({ children: [new TextRun({ text: "Guide: [guide name, designation]   ·   Emails: [author e-mail addresses]", font: FONT, size: PT(9), highlight: "yellow" })], alignment: AlignmentType.CENTER, spacing: { after: 240 } }),
-];
+add(new Paragraph({ children: [new TextRun({ text: "TextGrad-Guided Text-to-SQL for Community Seed-Bank Viability and Climate-Resilience Analytics", font: FONT, size: 48, color: INK })], spacing: { after: 160, line: 300, lineRule: "auto" } }));
+add(new Paragraph({ children: [new TextRun({ text: "Draft for review, not for submission. ", font: FONT, bold: true, color: INK }),
+  new TextRun({ text: "The LLM comparison (Section VII-E) is left blank until the benchmark runs are complete. All other numbers come from the current code and database.", font: FONT, color: INK })], spacing: { after: 150 } }));
+add(new Paragraph({ children: [new TextRun({ text: "GAYATHRI PRIYA V, GONU GUNTLA HEMA KOWSHIK, BHAVIN G KAMAT", font: FONT, bold: true, color: INK })], spacing: { after: 44 } }));
+add(new Paragraph({ children: [new TextRun({ text: "Department of Computer Science and Engineering (AI & ML), PES University, Bengaluru, India", font: FONT, color: INK })], spacing: { after: 44 } }));
+add(new Paragraph({ children: [new TextRun({ text: "Guide: [Guide name]", font: FONT, color: INK })], spacing: { after: 500 } }));
 
-const B = []; // body
-const add = (...xs) => xs.flat().forEach((x) => B.push(x));
-
-add(new Paragraph({ children: [new TextRun({ text: "Abstract", font: FONT, size: PT(9), bold: true, italics: true }), new TextRun({ text: "—", font: FONT, size: PT(9), bold: true }),
-  ...runs("Seed-bank staff ask questions such as “which lots have a most recent germination rate below 75%?”. Large language models (LLMs) can turn such questions into SQL, but the most damaging errors are queries that run without error and still return the wrong rows, for example by using every germination test instead of each lot’s latest one. Execution feedback cannot see these errors, and the correct answer is unknown at inference time. We present SeedSQL, which extends TextGrad prompt optimization with a gold-free validator. The validator reads the question’s intent with deterministic rules, checks the SQL against 13 configurable domain and temporal rules, and runs metamorphic tests: it changes an in-memory copy of the database in a controlled way (for example, adds a newer passing test for a returned lot) and checks that the query’s answer changes as the question demands. Its findings ground the TextGrad loss, veto a premature PASS, and are turned into typed textual gradients tagged with rule identifiers. We also build a 60-question benchmark over 66 real ICRISAT genebank accessions from Genesys with simulated monitoring records, and introduce temporal robust accuracy, which counts a query as correct only if it also matches the gold answer on five changed database states. Offline, the validator raised no false alarms on the 60 gold queries or on 18 correct rewrites, and flagged all 105 injected wrong-but-running mistakes; these are development-set figures. Five injected mistakes returned exactly the gold answer on the benchmark database but diverged on changed states, which ordinary execution accuracy would score as correct. The LLM comparison of seven methods is specified and implemented; its results will be added after the runs.", { size: PT(9), bold: true })],
-  alignment: AlignmentType.JUSTIFIED, spacing: { after: 80 } }));
-add(new Paragraph({ children: [new TextRun({ text: "Index Terms", font: FONT, size: PT(9), bold: true, italics: true }), new TextRun({ text: "—Text-to-SQL, large language models, TextGrad, prompt optimization, metamorphic testing, semantic validation, genebanks, seed banks.", font: FONT, size: PT(9), bold: true })],
-  alignment: AlignmentType.JUSTIFIED, spacing: { after: 120 } }));
+add(H1("Abstract"));
+add(P("Community seed banks keep records of seed lots, germination tests, storage conditions and distributions, but the staff who need answers from these records rarely write SQL. Large language models (LLMs) can translate questions into SQL, yet their queries often run without error and still return the wrong rows, for example by using every germination test when only a lot's most recent test matters. Execution feedback cannot see such errors, and in deployment there is no reference answer to compare with. We study TextGrad-guided prompt refinement for this domain and add a validator that needs no reference answer. The validator reads what the question asks for, checks the SQL against 13 configurable domain and temporal rules, and runs metamorphic tests: it makes a controlled change to an in-memory copy of the database, such as adding a newer passing test for a returned lot, and checks that the answer changes the way the question requires. Its findings are given to the TextGrad evaluator, block a PASS, and become gradients tagged with the rule that failed. We contribute a database built from 66 real ICRISAT accessions downloaded from Genesys with simulated monitoring records, a benchmark of 60 questions with hand-written gold SQL, temporal robust accuracy (a check of each answer on five changed database states), and a comparison of seven methods. Offline, the validator raised no false alarm on 78 correct queries and flagged all 105 injected wrong-but-running queries, although the rules were developed on the same questions. Five injected queries returned exactly the gold answer on the benchmark database but went wrong on changed states. [Main LLM finding to be added after the experiments.]"));
+add(new Paragraph({ children: [new TextRun({ text: "Index Terms: ", font: FONT, bold: true, color: INK }), ...runs("Text-to-SQL, large language models, TextGrad, prompt optimization, metamorphic testing, execution feedback, seed banks, genebanks.")], spacing: { after: 400 } }));
 
 // I
-add(H1("Introduction: Why Seed-Bank Questions Break Text-to-SQL"));
-add(H2("The Problem: Queries That Run but Answer Wrongly"));
-add(P("Seed banks keep each seed lot under watch for years. They record where it is stored, how much is left, the temperature and humidity of the store, every germination test, and every distribution to farmers. Coordinators need answers that combine these records: which lots need retesting, which drought-tolerant varieties still have viable stock, which stores keep seeds outside recommended conditions. Most coordinators do not write SQL."));
-add(P("LLM-based Text-to-SQL can bridge this gap [1]. Its errors come in two kinds. *Execution errors*, such as a misspelled column, are easy to see because the database rejects the query, and execution-guided self-correction fixes many of them [5]–[7]. *Semantic errors* are harder: the query runs and returns plausible rows, but it answers a different question. Seed-bank questions invite exactly these errors because their meaning is temporal and per entity. “Most recent germination rate” means the latest test *of each lot*, not every test and not the newest test in the whole table. “Viable stock” means stock above zero *and* a passing latest test. In deployment there is no reference answer to compare against, so neither execution feedback nor a generic LLM judge has a reliable signal."));
-add(H2("Our Idea in One Paragraph"));
-add(P("TextGrad [11] improves a variable, here the generator’s instructions, by asking an LLM to criticise the output (a textual *loss*), turning the criticism into advice aimed at the variable (a textual *gradient*), and rewriting the variable (a *step*). We keep this loop but ground the loss in evidence that needs no gold answer. A deterministic validator first extracts what the question requires, for example “latest test per lot, threshold below 75%”. It then checks the SQL with domain rules and runs *metamorphic tests* [13], [14]: if a returned lot receives a newer test of 90%, a correct answer to “lots whose latest rate is below 75%” must drop that lot. If the query still returns it, the query ignores the latest-test logic. The findings are given to the evaluator, block a PASS, and become typed gradient bullets such as “[TEMP-LATEST] select the latest test separately for each lot”."));
-add(H2("Contributions"));
-add(Item("1)", "**Validation-guided TextGrad (VG-TextGrad):** a TextGrad loop whose loss is grounded in gold-free validator evidence, with a validator veto on PASS, typed gradients tagged by rule, and an intent-conditioned rule memory for prompt-level optimization (Section V)."));
-add(Item("2)", "**Intent-conditioned metamorphic tests for SQL:** six metamorphic relations, selected from the question’s intent, that test a query by controlled changes to an in-memory copy of the database (Section V-E)."));
-add(Item("3)", "**A genebank-grounded benchmark:** a five-table SQLite database built from 66 real ICRISAT accessions published on Genesys [18], with simulated lots and monitoring records, and 60 questions with hand-written gold SQL in five categories and three tiers (Sections III–IV)."));
-add(Item("4)", "**Temporal robust accuracy (TRA):** a stricter metric that re-checks every answer on five changed database states, and an offline evaluation of the validator by mutation testing [17] (Sections VI–VII)."));
-add(Item("5)", "**An open implementation:** a read-only execution sandbox, an experiment runner with seven methods and paired statistics, and a browser interface that shows every refinement step."));
-add(P("We do not claim that TextGrad, execution-guided refinement or metamorphic testing is new. The contribution is combining them so that a prompt optimizer receives a semantic signal that does not depend on the answer key, in a domain where such errors are common."));
+add(H1("I. Introduction"));
+add(P("Community seed banks conserve locally adapted crop varieties such as finger millet, foxtail millet, sorghum and pulses. They track each seed lot from regeneration through storage, periodic germination testing and distribution to farmers. Coordinators regularly ask questions that combine these records: which lots have fallen below a viability threshold and need retesting, which drought-tolerant varieties still have viable stock, and which lots have spent the longest time outside recommended storage conditions. Answering them requires joins, aggregation and per-lot temporal logic, which most staff cannot write in SQL."));
+add(P("LLM-based Text-to-SQL systems can translate such questions into SQL [1], [2]. Their errors fall into two groups. Execution errors (unknown columns, syntax errors) are visible because the database rejects the query. Semantic errors are harder: the query runs and returns rows, but applies the wrong filter, joins incorrectly, or uses every germination test instead of the most recent one. Execution-guided self-correction mainly addresses the first group [4]–[6]."));
+add(P("TextGrad [3] treats a pipeline of LLM calls like a computation graph. An LLM evaluator produces a natural-language loss, an LLM converts it into a textual gradient aimed at a chosen variable, and an optimizer LLM rewrites that variable. Applied to Text-to-SQL, the variable can be the generator's system prompt. The weak point is the loss: if the evaluator cannot see that a query ignores the latest-test logic, the gradient cannot fix it either, and a reference answer is not available in deployment."));
+add(P("Our first version used execution feedback and an LLM evaluator only. In this version we give the evaluator evidence that does not depend on the reference answer. A deterministic validator extracts the question's intent, checks the SQL with seed-bank rules, and tests how the query behaves when the data changes. For example, if lot 12 is returned for \"lots whose most recent germination rate is below 75%\", adding a newer test of 90% for lot 12 must remove it from the answer. If it does not, the query is not using the latest test."));
+add(lead("Research question.", "Does grounding TextGrad's loss and gradient in a reference-free domain and temporal validator improve Text-to-SQL accuracy and robustness for community seed-bank analytics, compared with plain TextGrad, error-retry, few-shot and zero-shot prompting?"));
+add(new Paragraph({ children: [new TextRun({ text: "Contributions.", font: FONT, bold: true, color: INK })], spacing: { after: 120 } }));
+add(NUM("A seed-bank relational database built from 66 real ICRISAT genebank accessions published on Genesys [12], with simulated lots, germination tests, storage readings and distributions."));
+add(NUM("A benchmark of 60 natural-language questions in five categories and three complexity tiers, each with hand-written gold SQL whose result is checked to be non-empty and well-defined."));
+add(NUM("A validator that needs no reference answer: intent extraction, 13 configurable rules and six intent-conditioned metamorphic tests on in-memory copies of the database."));
+add(NUM("Validation-guided TextGrad (VG-TextGrad): the validator's findings ground the loss, veto a PASS, and become typed gradients tagged by rule, with a rule memory for prompt-level optimization."));
+add(NUM("Temporal robust accuracy, which re-checks each answer on five changed database states, and an offline evaluation of the validator by injecting realistic mistakes into the gold queries."));
+add(NUM("An open implementation: a read-only execution sandbox, an experiment runner for seven methods with paired statistics, and a browser interface that shows each refinement step."));
+add(P("We do not claim that TextGrad, execution-guided refinement or metamorphic testing is new. The contribution is using reference-free semantic checks as the signal for TextGrad, in a domain whose questions depend on temporal, per-lot logic, with ablations that separate the value of the validator from the value of the TextGrad loop. Section II reviews related work, Sections III–VI describe the formulation, method, data and protocol, Section VII reports results, and Sections VIII–X discuss the findings, limitations and future work."));
 
 // II
-add(H1("Related Work: What Exists and What Is Missing"));
-add(H2("LLM Text-to-SQL and How It Is Scored"));
-add(P("A recent survey [1] describes LLM-based Text-to-SQL as generating executable SQL from a question and a schema. Spider [2] and BIRD [3] established *execution accuracy*: a prediction is judged by its result, not its text. Nan et al. [4] showed that prompt design, such as schema format and demonstration choice, changes accuracy substantially, which motivates our zero-shot and few-shot baselines. Zhong et al. [16] observed that one database can make a wrong query look right, and proposed evaluating on a distilled suite of databases; our temporal robust accuracy applies the same idea with domain-specific state changes."));
-add(H2("Fixing Queries with Execution Feedback"));
-add(P("MAC-SQL [5] refines queries with execution feedback inside a multi-agent framework; DART-SQL [6] combines question rewriting with execution-guided refinement; LitE-SQL [7] categorises execution errors and measures them before and after self-correction. Reflect-SQL [8] uses an LLM judge in feedback loops, and ZAS-SQL [9] distils rules from repeated zero-shot failures. These methods react mainly to errors the database or an LLM judge can see. Our validator targets errors that execute cleanly."));
-add(H2("Optimizing Prompts with Textual Gradients"));
-add(P("ProTeGi [10] optimises prompts with natural-language “gradients” and beam search. TextGrad [11] generalises this into automatic differentiation via text. Gurajada et al. [12] studied prompt optimization for production NL2SQL systems. In these methods the loss is written by an LLM from the task output; when the LLM cannot see a semantic error, the gradient cannot fix it. We supply that missing evidence."));
-add(H2("Testing Without a Known Answer"));
-add(P("Metamorphic testing [13], [14] checks software when the correct output is unknown, by checking a relation between outputs on related inputs. Rigger and Su [15] used this idea to find bugs in database engines. Mutation testing [17] measures a checker by injecting realistic faults and counting how many it detects. We use metamorphic relations to check *generated queries* rather than engines, and mutation testing to measure the validator."));
-add(H2("Genebank Information Systems"));
-add(P("Genebanks document accessions with standard passport descriptors and publish them through Genesys [18]; systems such as GRIN-Global [19] manage inventory and viability tests. Hay et al. [20] found inconsistencies in CGIAR genebank viability data, and the FAO Genebank Standards [21] set expectations for storage and monitoring. AgriWorld [22] studies code-executing LLM agents for verifiable agricultural reasoning. We found no prior work on validator-grounded textual-gradient optimization for querying genebank records."));
+add(H1("II. Related Work"));
+add(lead("LLM-based Text-to-SQL.", "A recent survey [1] describes LLM-based Text-to-SQL as a natural-language interface to databases in which the model receives the question and the schema and generates executable SQL. Benchmarks such as Spider [10] and BIRD [11] established execution-based evaluation, where a prediction is judged by its result rather than its text. Zhong et al. [18] showed that a single database can make a wrong query look right and proposed evaluating on a suite of databases; our temporal robust accuracy follows the same idea with seed-bank specific changes. Nan et al. [2] showed that prompt design choices, such as how the schema is represented and how demonstrations are selected, change accuracy substantially. This motivates our zero-shot and few-shot baselines."));
+add(lead("Execution-guided refinement.", "MAC-SQL [4] refines queries iteratively using execution feedback within a multi-agent framework. DART-SQL [5] combines question rewriting with execution-guided refinement. LitE-SQL [6] categorises execution errors as syntax errors, unknown columns, unknown tables and others, and compares their frequency before and after self-correction. We adopt a similar error taxonomy and extend it with result-level categories, because a query that executes can still be wrong."));
+add(lead("LLM-as-judge refinement.", "Reflect-SQL [7] uses an LLM-as-a-judge scoring mechanism within feedback loops to refine results at several stages. ZAS-SQL [16] distils rules from recurring zero-shot failures and evaluates on a domain-specific urban-planning dataset. Our evaluator plays a similar judging role, but its verdict is checked against the validator and it drives prompt optimization rather than candidate selection."));
+add(lead("Textual-gradient prompt optimization.", "ProTeGi [8] optimises prompts with natural-language \"gradients\" and beam search. TextGrad [3] generalises the idea into an automatic-differentiation-style framework covering both instance optimization and prompt optimization across coding, science and medical tasks. Prompt optimization has also been studied for production NL2SQL systems [9]. To our knowledge, TextGrad has not been evaluated for Text-to-SQL in agricultural or genebank settings."));
+add(lead("Testing without a known answer.", "Metamorphic testing [19], [20] checks a program when the correct output is unknown, by checking a relation between its outputs on related inputs. Mutation testing [21] measures a checker by injecting realistic faults and counting how many it detects. We use metamorphic relations to check generated queries, and mutation testing to measure our validator."));
+add(lead("Genebank and seed-bank information systems.", "Genebanks document accessions with standardised passport descriptors and publish them through portals such as Genesys [12]. Management systems such as GRIN-Global [13] record inventory and viability testing. Studies of CGIAR genebanks [14] show that viability monitoring data are central to conservation decisions, and the FAO Genebank Standards [15] set expectations for storage and monitoring. In agriculture more broadly, AgriWorld [17] uses code-executing LLM agents for verifiable agricultural reasoning. We found no prior work applying textual-gradient prompt optimization to natural-language querying of seed-bank records."));
 
 // III
-add(H1("Data: Real Genesys Accessions with Simulated Monitoring Records"));
-add(H2("Where the Accessions Come From"));
-add(P("We downloaded the accession list of ICRISAT (FAO WIEWS code IND002) from Genesys [18]: 149,034 accession records, of which 148,933 carry a Genesys DOI. ICRISAT accession numbers carry crop prefixes (IS for sorghum, IP for pearl millet, ICC for chickpea, ICG for groundnut, ICP for pigeon pea, IE for finger millet, ISe for foxtail millet, and so on for 11 crops), which we use to assign the crop. With a fixed random seed (2026) we sample 6 accessions per crop, giving 66 accessions. Each row of the `SeedVariety` table keeps the real accession number, the holding genebank and the Genesys DOI, so every variety can be traced to its public record."));
-add(H2("The Five Tables"));
-add(P("Table I lists the tables. Lots, tests, readings and distributions link to their parent by `lot_id` or `variety_id`; `SeedLot.quantity` is the stock that remains after all distributions."));
-add(tcaption("I", "Database Tables and Row Counts"));
-add(TABLE([1250, 2990, 800], [
-  ["Table", "Key columns (what one row means)", "Rows"],
-  ["SeedVariety", "one real accession: crop, accession number, DOI, crop type, drought tolerance", "66"],
-  ["SeedLot", "one stored lot: store, current quantity (g), regeneration date", "122"],
-  ["GerminationTest", "one test of one lot: date, germination rate (%)", "294"],
-  ["StorageLog", "one monthly reading: temperature (°C), humidity (%)", "4,004"],
-  ["Distribution", "seed given to a farmer group: quantity (g), date", "152"],
-], { align: [AlignmentType.LEFT, AlignmentType.LEFT, AlignmentType.CENTER] }));
+add(H1("III. Problem Formulation"));
+add(P("Let *D* be a relational database with schema *S*, and *q* a natural-language question. A generator *G*, an LLM, is conditioned on a system prompt *p* (the instructions), the schema description and the question, and returns a SQL query. An executor *E* runs the query on *D* in read-only mode and returns either a result set *R* or an error message *e*:", { keepNext: true }));
+add(EQ("ŷ = G(p, S, q),      r = E(ŷ, D) ∈ {rows R, error e}", 1));
+add(P("For evaluation only, each question has a gold query *y*^{*} with result *R*^{*} = *E*(*y*^{*}, *D*). A prediction is correct when match(*R*, *R*^{*}) holds (Section VI-A). In deployment *R*^{*} is unknown, so refinement cannot depend on it."));
+add(P("TextGrad treats *p* as a trainable variable. An evaluator LLM *L* produces a textual loss from observable information, and a gradient LLM Γ produces feedback directed at *p*. In VG-TextGrad both also receive the validator report *V*_{k}, which is computed from the question, the query and the database only:", { keepNext: true }));
+add(EQ("V_{k} = Val(q, ŷ_{k}, r_{k}, D),     ℓ_{k} = L(q, S, ŷ_{k}, r_{k}, V_{k}),     ∇_{p}ℓ_{k} = Γ(p_{k}, q, ŷ_{k}, r_{k}, ℓ_{k}, V_{k})", 2));
+add(P("The Textual Gradient Descent (TGD) step is an LLM call that rewrites the variable:", { keepNext: true }));
+add(EQ("p_{k+1} = TGD(p_{k}, ∇_{p}ℓ_{k})", 3));
+add(P("The loop starts from the zero-shot prompt, *p*_{1} = *p*_{0}. It stops at the first iteration *k* where the query executes, the loss ends in VERDICT: PASS and the validator has no findings, or at *k* = *K* (the iteration limit). Plain TextGrad is the same loop without *V*_{k} and without the third condition. The objective is to maximise execution accuracy and robustness over the benchmark while keeping the number of LLM calls per question low."));
 
-add(H2("What Is Simulated and Why"));
-add(P("Genebanks do not publish per-lot monitoring data, so seed lots, germination tests, storage readings and distributions are simulated with the same fixed seed. Each accession has one to three lots in one of five stores. A lot’s germination falls from a starting value of 88–97% at a speed set by the store’s quality (cold rooms slowest, an ambient shelf fastest), plus noise, and is clipped to 18–99%. Storage readings are monthly; each lot’s series starts between mid-2022 and late 2025 and runs to the reference date, 1 November 2026. Crop type and drought tolerance follow a crop-level rule (millets and sorghum High; pulses and groundnut Medium), and the thresholds of 75% germination, 15 °C and 50% relative humidity are documented project assumptions, not agronomic recommendations. We therefore describe the database as *real accessions with simulated monitoring records*, not as real genebank operations data."));
 // IV
-add(H1("Benchmark: 60 Questions with Hand-Written Gold SQL"));
-add(H2("Five Question Categories and Three Difficulty Tiers"));
-add(P("We wrote 60 questions that a seed-bank coordinator would ask, each with a gold SQL query that we checked by hand. Each question has a category, given by the kind of reasoning it needs, and a tier, given by its complexity: roughly, Tier 1 needs one table and simple filters, Tier 2 adds grouping or one join, and Tier 3 adds several joins, per-lot temporal logic or combined conditions (Table II). The builder checks that every gold query returns a non-empty, tie-free answer, so that “top 5” questions have exactly one correct answer."));
-add(tcaption("II", "Benchmark Questions by Category and Tier"));
-add(TABLE([2000, 760, 760, 760, 760], [
-  ["Category (example)", "Tier 1", "Tier 2", "Tier 3", "Total"],
-  ["Temporal (latest test, date ranges)", "1", "4", "12", "17"],
-  ["Domain (viable stock, storage limits)", "1", "5", "8", "14"],
-  ["Aggregation (totals, averages)", "2", "7", "3", "12"],
-  ["Join (lots with varieties)", "0", "5", "6", "11"],
-  ["Retrieval (simple lookup)", "6", "0", "0", "6"],
-  ["**Total**", "**10**", "**21**", "**29**", "**60**"],
+add(H1("IV. Methodology"));
+add(P("The system follows seven stages: question, intent extraction, SQL generation, read-only execution, validation, evaluation, and TextGrad refinement or stop. Fig. 1 shows how they connect."));
+add(IMG("fig1_architecture.png", 640, 293));
+add(FCAP("Fig. 1 · system architecture and refinement loop"));
+add(P("The top row is one forward pass. The bottom row runs only when the evaluator or the validator rejects a query, and changes the prompt rather than the SQL. Intent extraction, execution and validation are plain code; they never call an LLM and never see the gold query."));
+add(H2("A. Validation-guided TextGrad loop"));
+add(CODE([
+  "Algorithm 1: VG-TextGrad",
+  "Input: question q, schema S, database D, initial prompt p0, limit K",
+  "p <- p0;  intent <- extract_intent(q)",
+  "for k = 1 .. K:",
+  "    y_k <- extract_sql( G(p, S, q) )                 # forward pass",
+  "    r_k <- E(y_k, D)                                 # read-only execution",
+  "    V_k <- validate(q, intent, y_k, r_k, D)          # rules + metamorphic tests",
+  "    l_k <- L(q, S, y_k, feedback(r_k), V_k)          # loss + VERDICT",
+  "    if r_k is rows and l_k ends with PASS and V_k is empty: return y_k",
+  "    if k = K: return y_k",
+  "    g_k <- Gamma(p, q, y_k, feedback(r_k), l_k, V_k)  # typed gradient",
+  "    p   <- TGD(p, g_k)                               # rewrite the prompt",
 ]));
-add(P("A typical Tier-3 temporal question is T3-01: “Which seed lots have a most recent germination rate below 75% and need retesting? Show the lot and that latest rate.” Its gold query selects, for each lot, the test whose date equals that lot’s maximum test date, and then applies the threshold (Section VIII)."));
-add(H2("Domain Assumptions Written Down"));
-add(P("The benchmark file states every assumption that changes an answer: the reference date (2026-11-01), the 75% germination threshold, the storage limits, the definition of viable stock (quantity above zero and latest rate at least 75%), and that `quantity` is already net of distributions. The same text is part of the schema description given to every method, so no method is judged on knowledge it was not given."));
-add(H2("Keeping Examples Apart from Test Questions"));
-add(P("The few-shot baseline uses four demonstrations. An automated test checks that no demonstration has the same SQL as, or a closely similar question to, any benchmark question (word-overlap Jaccard below 0.6). This check found that an earlier demonstration was a paraphrase of question TMP-01; we replaced it with a latest-storage-temperature example that teaches the same pattern on a different table."));
+add(P("feedback(*r*) is the SQLite error message, or the column names, row count and first rows. Each refinement costs four LLM calls (generate, loss, gradient, step), so with *K* = 4 a question costs at most 14 calls; a question solved on the first attempt costs two. The validator adds no LLM calls. The three changes from plain TextGrad are: the loss is grounded in the validator's findings, the validator can veto a PASS, and the gradient is typed, with one bullet per finding that starts with the rule ID."));
+add(H2("B. Intent extraction and domain rules"));
+add(P("The intent extractor reads the question with phrase lists stored in a JSON file (domain_rules.json). It records whether the question asks for the latest test (\"most recent\", \"still viable\"), a germination threshold and its direction (\"below 75%\", \"at least 85%\"), stock (\"available\", \"viable stock\"), years or date bounds, a no-retest condition, a storage-limit condition, a count, grouping (\"for each\"), and whether the answer is a list of lots or of varieties. The intent decides which rules and tests apply. Table I lists the rules."));
+add(TCAP("Table I.", "Domain and temporal rules used by the validator"));
+add(TABLE([1900, 1100, 5000], [
+  ["Rule ID", "Category", "What it checks"],
+  ["TEMP-LATEST", "temporal", "A \"most recent\" question selects the latest test for each lot before applying a threshold"],
+  ["TEMP-PERLOT", "temporal", "A MAX(test_date) subquery is correlated with the lot, not taken over the whole table"],
+  ["TEMP-RANGE", "temporal", "Every year or date bound in the question appears in the date filter"],
+  ["TEMP-NORETEST", "temporal", "\"No later retest\" questions exclude lots with a later test"],
+  ["DOM-THRESHOLD", "domain", "The stated threshold and direction are used (below 75% is rate < 75)"],
+  ["DOM-STOCK", "domain", "Stock questions require quantity > 0"],
+  ["DOM-DOUBLECOUNT", "domain", "Distributions are not subtracted again from the current stock"],
+  ["DOM-STORAGE", "domain", "Out of range means temperature above the limit OR humidity above the limit"],
+  ["JOIN-KEY", "join", "Lots join varieties on variety_id; tests, readings and distributions join lots on lot_id"],
+  ["AGG-GROUP", "aggregation", "\"For each X\" questions group by X"],
+  ["AGG-COUNT", "aggregation", "\"How many\" questions return a count"],
+  ["AGG-BARE", "aggregation", "Plain columns next to aggregates are grouped"],
+  ["SCHEMA", "schema", "Only tables and columns from the schema are used"],
+]));
+add(AFTER());
+add(P("Thresholds (75% germination, 15 °C, 50% humidity) and phrases live in the JSON file, so another seed bank can change them without code changes. Each finding carries the rule ID, a short piece of evidence and a fix in plain words."));
+add(H2("C. Metamorphic tests"));
+add(P("Rules read the SQL text; metamorphic tests check its behaviour. Each test copies the database into memory, makes one controlled change, re-runs the query read-only, and compares the new answer with what the question's intent predicts. Table II lists the six relations. At most four tests run per query, and changed germination rates are placed 15 points past the threshold so that small differences cannot hide a failure. Tests are skipped for top-k queries, whose membership can legitimately change."));
+add(TCAP("Table II.", "Metamorphic relations"));
+add(TABLE([1900, 4300, 2600], [
+  ["Relation", "Controlled change to the copy", "Expected effect on the answer"],
+  ["MR-LATEST", "Add a newer test on the other side of the threshold for a returned lot", "The lot leaves the answer"],
+  ["MR-LATEST-ADD", "Add a newer failing test for a lot that passed before", "The lot enters the answer"],
+  ["MR-STOCK", "Set a returned lot's quantity to 0", "The lot leaves the answer"],
+  ["MR-NORETEST", "Add a later passing retest for a returned lot", "The lot leaves the answer"],
+  ["MR-RANGE", "Add a test dated outside the period in the question", "The answer does not change"],
+  ["MR-STORAGE-OR", "Add a reading above the temperature limit with humidity in range", "The lot's out-of-range count rises"],
+]));
+add(AFTER());
+add(H2("D. Prompts"));
+add(P("The generator prompt contains the instructions *p*, a schema description that lists allowed values for categorical columns (crop types, drought-tolerance levels, storage locations) and the stated assumptions, and the question. The evaluator is told it has no reference answer and checks executability, tables and join keys, every stated condition and threshold, aggregation and grouping, per-lot \"most recent\" logic, the requested output columns, and plausibility. In VG-TextGrad it also receives the validator's findings between <VALIDATION_FINDINGS> tags and is told to treat a failed metamorphic test as strong evidence of an error. The gradient and step prompts follow the structure of TextGrad's TGD optimizer: the variable, its role, the feedback, and an improved variable returned between <IMPROVED_VARIABLE> tags."));
+add(H2("E. Instance-level and prompt-level optimization"));
+add(P("In instance-level mode the prompt is reset to *p*_{0} for every question, so refinement adapts to the question at hand. In prompt-level mode (--carry) the optimised prompt is carried to the next question, and the gradient is asked for general rules without lot numbers or names. Because one long prompt collects advice that does not apply to every question, VG-TextGrad keeps a rule memory in this mode: gradient bullets are stored under their rule ID (at most two per rule), and each new question starts from the base instructions plus only the lessons whose rules its intent activates."));
+add(H2("F. Baselines and ablations"));
+add(TCAP("Table III.", "Compared methods"));
+add(TABLE([2300, 5200, 1700], [
+  ["Method", "Description", "LLM calls per question"],
+  ["Zero-shot", "Instructions, schema and question; one generation", "1"],
+  ["Few-shot", "Zero-shot plus four question–SQL demonstrations, none in the test set", "1"],
+  ["Error-retry (ablation)", "Re-generate with the raw SQLite error appended until the query executes; no evaluator, no gradient", "1 to K"],
+  ["TextGrad", "Algorithm 1 without the validator (LLM loss from execution feedback only)", "2 + 4 per refinement"],
+  ["Validator-retry (ablation)", "Validator findings appended to the generator prompt; no evaluator, no TextGrad", "1 to K"],
+  ["VG-TextGrad (static) (ablation)", "Algorithm 1 with rules only, no metamorphic tests", "2 + 4 per refinement"],
+  ["VG-TextGrad", "Algorithm 1", "2 + 4 per refinement"],
+], { center: [2] }));
+add(AFTER());
+add(P("TextGrad's first iteration is identical to zero-shot, so any difference comes from refinement. Error-retry stops once a query executes, so it cannot repair semantic errors. Validator-retry shows what the validator gives without the TextGrad loop, and VG-TextGrad (static) shows what the metamorphic tests add over the rules."));
+add(H2("G. Implementation"));
+add(P("The pipeline is written in Python with only the standard library for its core (sqlite3, urllib). The database is opened read-only with PRAGMA query_only. Only single SELECT or WITH statements are accepted, and each query is limited to 10 seconds. Metamorphic tests run on in-memory copies made with the SQLite backup API and are discarded afterwards. The LLM client supports any OpenAI-compatible endpoint; in this study we use openai/gpt-oss-20b [23] served by Groq at temperature 0 with low reasoning effort. If a provider retires a model, the client switches to an available one, and the model actually used for every answer is written to the run's config.json. A browser interface runs SQLite client-side through sql.js and shows every iteration's SQL, result, validator findings, loss, gradient and prompt diff."));
 
 // V
-add(H1("Method: How Validation-Guided TextGrad Works"));
-add(H2("Problem Setup in Symbols"));
-add(P("Let *D* be the database with schema description *S*, and *q* a question. The generator LLM *G*, given instructions *p* (the system prompt), returns a query, and the read-only executor *E* returns rows or an error:"));
-add(EQ("*ŷ* = *G*(*p*, *S*, *q*),      *r* = *E*(*ŷ*, *D*)", 1));
-add(P0("For evaluation only, each question has a gold query *y*^{∗} with result *R*^{∗} = *E*(*y*^{∗}, *D*). Refinement never sees *y*^{∗} or *R*^{∗}."));
-add(H2("Baseline: The TextGrad Loop"));
-add(P("TextGrad treats *p* as the trainable variable. At iteration *k* an evaluator LLM *L* writes a loss from what it can observe, a gradient LLM Γ turns it into advice for *p*, and a step LLM rewrites *p*:"));
-add(EQ("ℓ_{k} = *L*(*q*, *S*, *ŷ*_{k}, *r*_{k}),    ∇_{p}ℓ_{k} = Γ(*p*_{k}, *q*, *ŷ*_{k}, *r*_{k}, ℓ_{k})", 2));
-add(EQ("*p*_{k+1} = TGD.step(*p*_{k}, ∇_{p}ℓ_{k})", 3));
-add(P0("The loss ends with VERDICT: PASS or FAIL. The loop starts from the zero-shot instructions *p*_{1} = *p*_{0} and stops when the query executes and the verdict is PASS, or after *K* = 4 iterations. The step LLM returns the new prompt between `<IMPROVED_VARIABLE>` tags. In this *instance-level* mode the prompt is optimised per question; in *prompt-level* mode (option `--carry`) the optimised prompt is carried to the next question."));
-add(H2("Step 1: Reading What the Question Requires"));
-add(P("A deterministic intent extractor (no LLM) reads the question with phrase lists stored in a configuration file. It records, for example, whether the question asks for the latest test (“most recent”, “still viable”), a threshold and its direction (“below 75%”), stock (“available”, “viable stock”), years or date bounds, a no-retest condition, a storage-limit condition, a count, grouping (“for each”), and the entity being returned (lot or variety). The intent decides which rules and tests apply. Table III shows how often each question-dependent rule is activated on the benchmark."));
-add(H2("Step 2: Checking the SQL with Domain Rules"));
-add(P("Thirteen rules in four groups check the query text and its result. *Temporal* rules: TEMP-LATEST (a latest-test question must select the latest test per lot), TEMP-PERLOT (a MAX(test_date) subquery must be correlated with the lot, not taken over the whole table), TEMP-RANGE (every stated year bound must appear) and TEMP-NORETEST. *Domain* rules: DOM-THRESHOLD (the stated threshold and direction), DOM-STOCK (quantity above zero), DOM-DOUBLECOUNT (do not subtract distributions from net stock) and DOM-STORAGE (out of range means temperature *or* humidity above the limit). *Join and aggregation* rules: JOIN-KEY, AGG-GROUP, AGG-COUNT and AGG-BARE. A SCHEMA rule covers unknown tables and columns. Every rule has an identifier, a category and a fix written in plain words. Thresholds and phrases live in a JSON file, so another seed bank can change them without code changes."));
-add(tcaption("III", "Rule Activation by Intent on the 60 Questions"));
-add(TABLE([2600, 1400], [
+add(H1("V. Dataset and Benchmark"));
+add(H2("A. Data source: ICRISAT accessions from Genesys"));
+add(P("We downloaded the accession list of ICRISAT (FAO WIEWS code IND002) from Genesys [12]. It contains 149,034 accession records, of which 148,933 have a Genesys DOI. ICRISAT accession numbers start with a crop prefix, which we use to assign the crop: IS and ISS sorghum, IP and ISP pearl millet, ICC chickpea, ICG and GGP groundnut, ICP and ISC pigeon pea, IE finger millet, ISe foxtail millet, IPm proso millet, IEc barnyard millet, IPs kodo millet and IPmr little millet. With a fixed random seed (2026) the builder samples six accessions per crop, 66 in total, and checks that every gold query returns a non-empty, tie-free result. Each SeedVariety row keeps the real accession number, the holding genebank and the DOI, so every variety can be traced to its public record."));
+add(H2("B. Database schema"));
+add(P("The database has five tables linked by foreign keys: each seed lot belongs to one variety, and each germination test, storage reading and distribution belongs to one lot. Table IV gives the sizes."));
+add(TCAP("Table IV.", "Seed-bank database (66 real accessions, simulated monitoring records, random seed 2026)"));
+add(TABLE([1700, 800, 3900, 2900], [
+  ["Table", "Rows", "Key fields", "Role"],
+  ["SeedVariety", "66", "crop_name, local_name, crop_type, drought_tolerance, accession_number, genebank, doi", "Real ICRISAT accessions (11 crops, 4 crop types)"],
+  ["SeedLot", "122", "variety_id, storage_location, quantity, collection_date", "Physical seed batches in 5 locations"],
+  ["GerminationTest", "294", "lot_id, test_date, germination_rate", "1–4 viability tests per lot"],
+  ["StorageLog", "4,004", "lot_id, recorded_date, temperature, humidity", "Monthly storage readings"],
+  ["Distribution", "152", "lot_id, destination, quantity, date", "Seed given to farmer groups"],
+], { center: [1] }));
+add(AFTER());
+add(H2("C. Data generation"));
+add(P("Genebanks do not publish per-lot monitoring records, so lots, tests, readings and distributions are simulated. Each accession has one to three lots. Each storage location has a climate profile, from a cold room averaging about 8 °C and 35% relative humidity to an ambient shelf averaging about 20 °C and 54%. A lot's germination rate starts at 88–97% and declines with years in storage, faster in poorer storage:", { keepNext: true }));
+add(EQ("g(t) = g_{0} − t · q_{loc} · u − ε,     u ~ U(1.2, 3.2),  ε ~ U(0, 4)", 4));
+add(P("where *t* is years since the lot was regenerated and *q*_{loc} a location quality factor (0.4 for Cold Room A, 0.6 for Cold Room B, 1.3 for the village hub, 1.6 for the clay pot store and 2.4 for the ambient shelf). Rates are clipped to 18–99%. Crop type and drought tolerance follow a crop-level rule (millets and sorghum High, pulses and groundnut Medium). Because of noise, a lot can fail one test and pass a later retest, and the reverse: 24 lots now have a latest rate below 75% although an earlier test was 75% or higher. This is exactly why \"most recent test\" logic matters. Fig. 2 shows all 294 tests."));
+add(IMG("fig3_germination.png", 600, 290));
+add(FCAP("Fig. 2 · germination rate against years in storage, by storage location (lines are least-squares fits)"));
+add(H2("D. Benchmark questions"));
+add(P("The benchmark has 60 questions. Each has a category, given by the kind of reasoning it needs, and a tier, following the proposal's three complexity levels: Tier 1 uses one table and simple filters, Tier 2 adds grouping or one join, and Tier 3 adds per-lot temporal logic, several joins or combined conditions. Fig. 3 shows the split. Assumptions are stated in the questions and in the schema description: a retest threshold of 75% germination, recommended storage of at most 15 °C and 50% humidity, viable stock defined as quantity above zero with a most recent germination of at least 75%, a reference date of 1 November 2026, and SeedLot.quantity as the stock left after all distributions."));
+add(IMG("fig4_benchmark.png", 600, 220));
+add(FCAP("Fig. 3 · benchmark questions by category and tier (10 in Tier 1, 21 in Tier 2, 29 in Tier 3)"));
+add(TCAP("Table V.", "Example benchmark questions and the SQL features each requires (gold rows on the current database)"));
+add(TABLE([1000, 4700, 2800, 900], [
+  ["ID", "Question (abridged)", "Required SQL", "Gold rows"],
+  ["T1-01", "Crop and local names of highly drought-tolerant varieties", "Filter, two columns", "48"],
+  ["T1-03", "Tests in 2026 with germination below 75%", "Date range + threshold", "10"],
+  ["DOM-01", "How many lots are out of stock", "COUNT with filter", "1"],
+  ["T2-01", "Total quantity per storage location", "GROUP BY + SUM", "5"],
+  ["T2-03", "Top 5 lots by out-of-range storage readings", "OR filter, ORDER BY, LIMIT", "5"],
+  ["JN-02", "Crops with lots on the Ambient Shelf", "Join + filter", "10"],
+  ["TMP-11", "Months of 2026 with average storage temperature above 15 °C", "strftime + GROUP BY + HAVING", "1"],
+  ["TMP-14", "Lots with seed distributed in 2026 and the amount", "Date range + GROUP BY", "20"],
+  ["T3-01", "Lots whose most recent germination is below 75%", "Correlated MAX subquery", "38"],
+  ["T3-02", "Drought-tolerant varieties with viable stock", "3-table join + latest test", "36"],
+  ["T3-04", "Varieties with a low result since 2025 and no retest", "Join + NOT EXISTS", "16"],
+  ["TMP-05", "Lots that lost more than 20 points between first and latest test", "Self-join on MIN and MAX dates", "18"],
+  ["DOM-02", "Lots that are viable stock", "Stock + latest test + threshold", "77"],
+  ["DOM-07", "Original quantity of each lot (current stock plus distributed)", "Join + SUM, no double counting", "86"],
+  ["AGG-01", "Average germination per crop type", "3-table join + AVG", "4"],
+], { center: [3] }));
+add(AFTER());
+add(P("Four few-shot demonstrations cover a filter, a GROUP BY, the latest storage reading per lot and NOT EXISTS. An automated test checks that no demonstration has the same SQL as a benchmark question or a very similar wording. This check found that one demonstration in the earlier version was a reworded copy of question TMP-01, and it was replaced."));
+
+// VI
+add(H1("VI. Evaluation Protocol"));
+add(H2("A. Relaxed execution accuracy"));
+add(P("Following execution-based evaluation [10], [11], a prediction is scored by its result, not its text. match(*R*, *R*^{*}) is true when (1) *R* and *R*^{*} have the same number of rows, and (2) there is an injective mapping from gold columns to predicted columns such that the multiset of projected rows is equal. Numbers are compared to two decimal places, numeric strings are treated as numbers, and text is compared case-insensitively. Row order, column order, aliases and extra predicted columns are ignored. Automated tests confirm that equivalent formulations match (for example a window function in place of a correlated subquery), while wrong ones do not (for example AND in place of OR, or all tests in place of the latest)."));
+add(H2("B. Temporal robust accuracy"));
+add(P("A query can match the gold result on one database by coincidence. Temporal robust accuracy (TRA) counts a question as correct only if the prediction matches gold on the benchmark database and on five changed states. Each state is a copy with 14 new germination tests dated after all existing tests (some crossing 75%), six lots emptied and three restocked, three new distributions, six new storage readings, and records dated 2027-02-10 for four lots, as if next year's data had arrived. States where the gold top-k answer has a tie are redrawn. The gold query is the oracle here, so TRA is only used for evaluation, never inside the loop."));
+add(H2("C. Metrics"));
+add(P("For *N* questions with final result *R*_{i} and gold *R*^{*}_{i}:", { keepNext: true }));
+add(EQ("EX = (1/N) Σ_{i} 1[ match(R_{i}, R^{*}_{i}) ]", 5));
+add(EQ("TRA = (1/N) Σ_{i} 1[ match on D and on each of the 5 changed states ]", 6));
+add(TCAP("Table VI.", "Metrics"));
+add(TABLE([2800, 6200], [
+  ["Metric", "Definition"],
+  ["Execution accuracy (EX)", "Share of questions whose final result matches gold"],
+  ["Temporal robust accuracy (TRA)", "Share of questions that also match gold on all five changed states"],
+  ["Rule compliance", "Share of final queries with no validator finding (partly circular for the VG methods, so reported as a diagnostic)"],
+  ["Successful query rate (SQR)", "Share of questions whose final SQL executes without error"],
+  ["Average iterations", "Mean generate-and-execute passes per question"],
+  ["Average LLM calls", "Mean LLM calls per question, as a cost measure"],
+  ["First-attempt EX", "EX of iteration 1 only; the gap to final EX is the gain from refinement"],
+  ["Error reduction", "Questions with any error on the first attempt compared with the final answer, by category"],
+]));
+add(AFTER());
+add(H2("D. Error taxonomy"));
+add(P("Execution errors are classified from SQLite messages as syntax error, unknown column, unknown table, ambiguous column, aggregation misuse, invalid or non-SELECT statement, and other. Queries that execute but fail to match gold are labelled wrong result, or wrong result (empty) when they return no rows. Validator findings on the final answers are also counted by category (schema, join, temporal, domain, aggregation)."));
+add(H2("E. Evaluating the validator"));
+add(P("The validator is evaluated offline, without any LLM. False alarms are counted on the 60 gold queries and on 18 correct rewrites written in other SQL styles (window functions, common table expressions, NOT EXISTS, ORDER BY with LIMIT 1, conditional sums, strftime or BETWEEN for years, USING joins). Detection is measured by mutation testing [21]: 12 operators inject realistic mistakes into the gold queries, such as dropping the latest-test condition, taking the newest test of the whole table, using the earliest test, moving a threshold, turning OR into AND, subtracting distributions from the current stock, and joining on the wrong key. Only mutants that execute and return a different answer from gold are kept, because those are the mistakes that execution feedback would accept."));
+add(H2("F. Configuration and statistics"));
+add(P("All methods use the same model, temperature 0, database and iteration limit *K* = 4. [Report the provider, model identifier and run dates.] Each configuration is run R = 3 times to measure run-to-run variation, and we report the mean and standard deviation. Accuracies get 95% Wilson confidence intervals. Methods are compared on the same questions with the exact McNemar test [22] on paired correct/incorrect outcomes, with Holm's correction [24] over ten planned comparisons. With 60 questions, one question is 1.7 percentage points overall, so small differences are not treated as conclusive."));
+
+// VII
+add(H1("VII. Results"));
+add(P("Sections A to D are offline results produced by eval_validator.py and eval_robustness.py; they need no LLM and can be reproduced exactly. Section E is the LLM comparison."));
+add(H2("A. False alarms on correct queries"));
+add(P("A validator that flags correct queries would push TextGrad away from right answers. On the 60 gold queries and the 18 correct rewrites the validator produced no findings at all (0 false alarms out of 78)."));
+add(H2("B. Detection of wrong-but-running queries"));
+add(P("The 12 mutation operators produced 105 mutants that execute and return a different answer from gold. Table VII and Fig. 4 show the result. Static rules flagged 104 of them (99%), and with metamorphic tests all 105 (100%) were flagged. The one mutant the rules missed had a reversed threshold direction, and a metamorphic test caught it. Metamorphic tests also failed, independently of the rules, for about half of the latest-test mistakes and for every stock, date-bound and no-retest mistake. For structural mistakes such as a missing GROUP BY no relation applies, and the rules do the work."));
+add(TCAP("Table VII.", "Validator evaluation (offline, no LLM)"));
+add(TABLE([5600, 1600, 1800], [
+  ["Check", "Queries", "Result"],
+  ["False alarms on gold queries", "60", "0 (0%)"],
+  ["False alarms on correct rewrites in other SQL styles", "18", "0 (0%)"],
+  ["Wrong-but-running mutants flagged by static rules", "105", "104 (99%)"],
+  ["Wrong-but-running mutants flagged by rules + metamorphic tests", "105", "105 (100%)"],
+], { center: [1, 2] }));
+add(AFTER());
+add(IMG("fig2_validator.png", 600, 309));
+add(FCAP("Fig. 4 · mutants flagged by mistake type (number of mutants in brackets)"));
+add(P("These figures are optimistic. The rules were refined on this benchmark until the false alarms disappeared, so they describe a development set. A held-out question set written by someone who did not write the rules is needed before they can be read as generalisation."));
+add(H2("C. Wrong queries that look right on one database"));
+add(P("Nine mutants returned exactly the gold answer on the benchmark database, so ordinary execution accuracy would score them as correct. On the five changed states, five of them diverged from gold (Table VIII): four had dropped a date bound (questions T1-03, TMP-10, TMP-11 and TMP-14) and one had dropped the no-retest condition (T3-04). Today these give the right rows; when next year's records arrive they will not. The validator flagged four of the five without the gold answer. The other four mutants gave the gold answer on every state, so there is no evidence that they are wrong. TRA accepted all 60 gold queries and all 18 correct rewrites."));
+add(TCAP("Table VIII.", "Mutants that match gold on the benchmark database"));
+add(TABLE([6600, 2400], [
+  ["Outcome on the five changed states", "Mutants"],
+  ["Diverge from gold (counted correct by EX, rejected by TRA)", "5"],
+  ["   of which dropped a date bound", "4"],
+  ["   of which dropped the no-retest condition", "1"],
+  ["   of which flagged by the validator", "4"],
+  ["Same as gold on every state", "4"],
+  ["Correct queries (gold and rewrites) rejected by TRA", "0 of 78"],
+], { center: [1] }));
+add(AFTER());
+add(H2("D. Coverage and cost of validation"));
+add(P("Table IX shows how often intent extraction activates each question-dependent rule. On the 60 gold queries the validator ran 28 metamorphic tests in total, on 14 questions; the other questions have no applicable relation and are checked by rules alone. Validation took about 6 ms per query on a laptop, which is small next to one LLM call."));
+add(TCAP("Table IX.", "Rule activation by intent on the 60 questions"));
+add(TABLE([5600, 1600], [
   ["Rule (activated when the question…)", "Questions"],
-  ["AGG-GROUP (…asks “for each”)", "23"],
+  ["AGG-GROUP (…asks \"for each\")", "23"],
   ["TEMP-LATEST (…asks for the latest test)", "18"],
   ["DOM-THRESHOLD (…states a germination threshold)", "14"],
-  ["AGG-COUNT (…asks “how many”)", "13"],
+  ["AGG-COUNT (…asks \"how many\")", "13"],
   ["TEMP-RANGE (…states a year or date bound)", "12"],
   ["DOM-STOCK (…requires stock)", "6"],
   ["DOM-STORAGE (…mentions storage limits)", "5"],
   ["TEMP-NORETEST (…excludes retested lots)", "2"],
-]));
-add(P0("JOIN-KEY, DOM-DOUBLECOUNT, AGG-BARE and SCHEMA are checked on every query.", { run: { size: PT(8) } }));
-add(H2("Step 3: Metamorphic Tests: Change the Data, Check the Answer Moves Correctly"));
-add(P("Rules read the SQL; metamorphic tests read its *behaviour*. Each test copies the database into memory, makes one controlled change, re-runs the generated query in read-only mode, and compares the new answer with the answer the question’s intent predicts. No gold answer is needed. Six relations are implemented (Table IV); at most four tests run per query, and changed rates are placed 15 points past the threshold so that rounding cannot hide a failure. Tests are skipped when they would not be meaningful, for example for “top 5” queries whose membership can legitimately shift."));
-add(tcaption("IV", "Metamorphic Relations Used by the Validator"));
-add(TABLE([1150, 2250, 1640], [
-  ["Relation", "Controlled change", "Expected effect"],
-  ["MR-LATEST", "add a newer test on the other side of the threshold for a returned lot", "the lot leaves the answer"],
-  ["MR-LATEST-ADD", "add a newer failing test for a lot that passed before", "the lot enters the answer"],
-  ["MR-STOCK", "set a returned lot’s stock to 0", "the lot leaves the answer"],
-  ["MR-NORETEST", "add a later passing retest for a returned lot", "the lot leaves the answer"],
-  ["MR-RANGE", "add a test dated outside the asked period", "answer unchanged"],
-  ["MR-STORAGE-OR", "add a reading above the temperature limit, humidity within", "the lot’s count rises"],
-], { align: [AlignmentType.LEFT, AlignmentType.LEFT, AlignmentType.LEFT] }));
-add(H2("Step 4: Grounded Loss, Validator Veto and Typed Gradients"));
-add(P("VG-TextGrad changes three parts of the baseline loop (Fig. 1). *Grounded loss:* the evaluator receives the validator’s findings inside `<VALIDATION_FINDINGS>` tags and is told to treat failed metamorphic tests as strong evidence. *Veto:* an iteration passes only if the evaluator says PASS **and** the validator has no findings, so an LLM judge cannot wave a validated error through. *Typed gradient:* the gradient LLM writes one bullet per finding, starting with its rule identifier (for example “[TEMP-LATEST] …”), plus at most two further bullets for problems the evaluator found. In symbols, with validator report *V*_{k}:"));
-add(EQ("*V*_{k} = Val(*q*, *ŷ*_{k}, *r*_{k}, *D*),    ℓ_{k} = *L*(*q*, *S*, *ŷ*_{k}, *r*_{k}, *V*_{k})", 4));
-add(EQ("pass_{k} = [*r*_{k} executes] ∧ [ℓ_{k} = PASS] ∧ [*V*_{k} = ∅]", 5));
-add(IMG("fig1_pipeline.png", 300, 421));
-add(caption("Fig. 1.  VG-TextGrad pipeline. Steps 1, 3 and 4 are deterministic and never see the gold answer; steps 2, 5, 6 and 7 are LLM calls. The prompt, not the SQL, is the optimised variable.", false));
-add(H2("Rule Memory for Prompt-Level Optimization"));
-add(P("When prompts are carried across questions, a long optimised prompt can fill up with advice that does not apply. In prompt-level mode VG-TextGrad keeps a *rule memory*: typed gradient bullets are stored under their rule identifier (at most two per rule), and each new question starts from the base instructions plus only the lessons whose rules its intent activates. Here the gradient is told to write general rules, never specific lot numbers."));
-add(H2("Safety: A Read-Only Sandbox"));
-add(P("Generated SQL runs on a read-only connection; only a single SELECT or WITH statement is accepted, and a progress handler stops any query after 10 seconds. Metamorphic tests run on in-memory copies that are discarded after use, so the stored database never changes."));
-
-// VI
-add(H1("Evaluation Plan: Methods, Metrics and Statistics"));
-add(H2("Seven Methods, Including Two Ablations"));
-add(P("Table V lists the compared methods. All use the same schema description and base instructions. The ablations isolate the two new ingredients: *Validator-retry* gives the validator’s findings straight to the generator without TextGrad, and *VG-TextGrad (static)* uses the rules without metamorphic tests."));
-add(tcaption("V", "Compared Methods"));
-add(TABLE([1500, 2640, 900], [
-  ["Method", "Feedback used to improve the query", "Max LLM calls"],
-  ["Zero-shot", "none", "1"],
-  ["Few-shot", "none (4 demonstrations)", "1"],
-  ["Error-retry", "raw execution error, query rewritten", "4"],
-  ["TextGrad", "LLM loss from execution result, prompt rewritten", "14"],
-  ["Validator-retry", "validator findings, query rewritten", "4"],
-  ["VG-TextGrad (static)", "rules only, TextGrad loop", "14"],
-  ["**VG-TextGrad**", "rules + metamorphic tests, TextGrad loop", "14"],
-], { align: [AlignmentType.LEFT, AlignmentType.LEFT, AlignmentType.CENTER] }));
-add(P0("With *K* = 4, a TextGrad method makes four calls per failed iteration (generate, loss, gradient, step) and two in the last, so at most 14.", { run: { size: PT(8) } }));
-add(H2("What We Measure"));
-add(Item("1)", "**Execution accuracy (EX):** the final result matches the gold result on the benchmark database. Matching is relaxed in the usual way: row order, column order, aliases and extra predicted columns are ignored, each gold column must map to a distinct predicted column, numbers are compared to two decimals and text without case."));
-add(Item("2)", "**Temporal robust accuracy (TRA):** EX on the benchmark database *and* on each of five changed states. Each state adds 14 newer germination tests (some crossing 75%), empties six lots and restocks three, adds three distributions and six storage readings, and adds next-year records (dated 2027-02-10) for four lots. States where the gold “top-k” answer has a tie are redrawn. The gold query is the oracle, so TRA is used for evaluation only."));
-add(Item("3)", "**Rule compliance:** the share of final queries with no validator finding. For the VG methods this is partly circular, because they are optimised against the validator, so we report it as a diagnostic, not as accuracy."));
-add(Item("4)", "**Cost and behaviour:** successful-query rate, first-attempt accuracy, average iterations and LLM calls, and error categories of the first and the final attempt (syntax, unknown column or table, aggregation misuse, wrong result, empty result)."));
-add(H2("Model and Settings"));
-add(P("The runner supports any OpenAI-compatible endpoint. Our configuration uses the Groq API with the open-weight model gpt-oss-20b [26], temperature 0, low reasoning effort and at most 4,096 output tokens. If the provider has retired a model, the client switches to an available one; the model actually used for every answer, and any switch, is written to the run’s `config.json`."));
-add(H2("Statistics"));
-add(P("Each method answers every question three times (`--repeats 3`), and we report the mean and standard deviation over the repeats. Accuracies get 95% Wilson intervals [24]. Because all methods answer the same questions, methods are compared pairwise with the exact McNemar test [23] on the questions where exactly one of the two is right, with Holm’s correction [25] across the ten planned comparisons."));
-
-// VII
-add(H1("Results"));
-add(P("Sections VII-A to VII-D are offline results: they need no LLM, are fully reproducible (`eval_validator.py`, `eval_robustness.py`), and are reported exactly as produced. Section VII-E is the LLM comparison, which has not been run yet."));
-add(H2("Does the Validator Raise False Alarms on Correct SQL?"));
-add(P("A validator that flags correct queries would push TextGrad away from right answers. We ran it on all 60 gold queries and on 18 correct rewrites in other SQL styles (window functions such as ROW_NUMBER and RANK, common table expressions, NOT EXISTS, ORDER BY … LIMIT 1 subqueries, conditional sums, strftime or BETWEEN for years, USING joins). It produced **no findings** on any of the 78 correct queries."));
-add(H2("Does the Validator Catch Realistic Mistakes?"));
-add(P("We injected 12 types of semantic mistake into the gold queries (Fig. 2), such as dropping the latest-test condition, taking the newest test of the whole table, using the earliest test, moving a threshold, turning OR into AND, subtracting distributions from net stock, and joining on the wrong key. We kept only mutants that execute and return a *different* answer from gold, that is, mistakes execution feedback would accept: 105 mutants. Static rules flagged 104 (99%); with metamorphic tests all 105 (100%) were flagged. The one mutant missed by the rules had a reversed threshold direction; a metamorphic test caught it. Metamorphic tests also failed, independently of the rules, for about half of the latest-test mistakes and for every stock, date-bound and no-retest mistake. For structural mistakes such as a missing GROUP BY no relation applies, and the rules do the work (Fig. 2)."));
-add(P("These figures are optimistic. The rules were refined on this benchmark until the false alarms disappeared, so they describe a development set. An independent question set written by someone who did not write the rules is needed before they can be read as generalisation."));
-add(IMG("fig2_mutants.png", 330, 252));
-add(caption("Fig. 2.  Injected mistakes by type (number of mutants in brackets). Blue: share flagged by static rules. Orange: share for which a metamorphic test also failed. With both, 105 of 105 were flagged.", false));
-add(H2("Can a Wrong Query Look Right on One Database State?"));
-add(P("Nine of the injected mutants returned *exactly* the gold answer on the benchmark database, so ordinary execution accuracy scores them as correct. On the five changed states, five of them diverged from gold (Table VI): four had dropped a date bound and one had dropped the no-retest condition. Today these happen to give the right rows; when next year’s records arrive, they will not. The validator flagged four of the five without any gold answer. The other four mutants gave the gold answer on every state, so we have no evidence that they are wrong. TRA accepted all 60 gold queries and all 18 correct rewrites, so it did not penalise any correct query."));
-add(tcaption("VI", "Mutants That Match Gold on the Benchmark Database"));
-add(TABLE([3240, 1800], [
-  ["Outcome on five changed states", "Mutants"],
-  ["Diverge from gold (hidden mistakes)", "5"],
-  ["   of which: dropped date bound", "4"],
-  ["   of which: dropped no-retest condition", "1"],
-  ["   of which: flagged by the validator", "4"],
-  ["Same as gold on every state", "4"],
-  ["Correct queries rejected by TRA", "0 of 78"],
-]));
-add(H2("How Much Does Validation Cost?"));
-add(P("On the 60 gold queries the validator ran 28 metamorphic tests in total, on 14 questions; the other questions have no applicable relation and are checked by rules alone. Validation took about 6 ms per query on a laptop, which is negligible next to one LLM call. The validator adds no LLM calls."));
-add(H2("LLM Comparison of the Seven Methods (Pending)"));
-add(P("Table VII shows the layout of the main result. We have not yet completed a run with a real LLM: an earlier attempt was blocked by the provider (HTTP 403) and is not a result, and the pipeline was otherwise tested only with an offline mock model whose numbers we do not report. The table will be filled from `results/<run>/stats.md` after `run_experiments.py --repeats 3`."));
-add(tcaption("VII", "Main Result (to Be Filled After the LLM Runs)"));
-add(TABLE([1560, 870, 870, 870, 870], [
-  ["Method", "EX (%)", "TRA (%)", "Rule comp. (%)", "Avg. calls"],
-  ["Zero-shot", "—", "—", "—", "—"],
-  ["Few-shot", "—", "—", "—", "—"],
-  ["Error-retry", "—", "—", "—", "—"],
-  ["TextGrad", "—", "—", "—", "—"],
-  ["Validator-retry", "—", "—", "—", "—"],
-  ["VG-TextGrad (static)", "—", "—", "—", "—"],
-  ["VG-TextGrad", "—", "—", "—", "—"],
-]));
-add(P("Three comparisons answer the research questions: VG-TextGrad against TextGrad (does grounded evidence help the optimizer?), against Validator-retry (does the TextGrad loop add value beyond feeding findings back?), and against VG-TextGrad (static) (do metamorphic tests add value beyond rules?). Results will also be broken down by category and tier, since we expect the largest differences on Tier-3 temporal and domain questions."));
+], { center: [1] }));
+add(AFTER());
+add(H2("E. LLM comparison"));
+add(P("Draft note: the tables below are templates. Fill every \"—\" from results/<run>/summary.md and stats.md produced by run_experiments.py with --repeats 3, report the mean over three runs with the standard deviation, and then write the findings paragraph. Do not report numbers from the mock provider or from the earlier run that failed with HTTP 403."));
+add(TCAP("Table X.", "Execution accuracy and temporal robust accuracy (%) by method"));
+add(TABLE([3000, 1000, 1000, 1000, 1200, 1200], [
+  ["Method", "Tier 1", "Tier 2", "Tier 3", "All (EX)", "All (TRA)"],
+  ...["Zero-shot", "Few-shot", "Error-retry", "TextGrad", "Validator-retry", "VG-TextGrad (static)", "VG-TextGrad"].map((m) => [m, "—", "—", "—", "—", "—"]),
+], { center: [1, 2, 3, 4, 5] }));
+add(AFTER());
+add(P("[Findings: which method is best overall and per tier; whether VG-TextGrad's gain over TextGrad is concentrated in the temporal and domain questions; McNemar p-values for VG-TextGrad vs TextGrad, vs Validator-retry and vs VG-TextGrad (static).]"));
+add(TCAP("Table XI.", "Successful query rate, rule compliance, refinement effort and cost (all tiers)"));
+add(TABLE([3000, 1100, 1300, 1400, 1300, 1300], [
+  ["Method", "SQR (%)", "Rule comp. (%)", "First-attempt EX (%)", "Avg. iterations", "Avg. LLM calls"],
+  ["Zero-shot", "—", "—", "—", "1.00", "1.0"],
+  ["Few-shot", "—", "—", "—", "1.00", "1.0"],
+  ...["Error-retry", "TextGrad", "Validator-retry", "VG-TextGrad (static)", "VG-TextGrad"].map((m) => [m, "—", "—", "—", "—", "—"]),
+], { center: [1, 2, 3, 4, 5] }));
+add(AFTER());
+add(TCAP("Table XII.", "Questions by error category, first attempt → final answer"));
+add(TABLE([3000, 1500, 1500, 1500, 1500], [
+  ["Category", "Error-retry", "TextGrad", "Validator-retry", "VG-TextGrad"],
+  ...["Syntax error", "Unknown column / table", "Other execution error", "Wrong result", "Wrong result (empty)"].map((c) => [c, "— → —", "— → —", "— → —", "— → —"]),
+], { center: [1, 2, 3, 4] }));
+add(AFTER());
+add(P("The key comparison is the wrong-result row. Error-retry cannot change a query that executes, so any reduction there comes from the evaluator, the validator, or both. The run folder also contains charts of accuracy by tier and by category and of error categories (charts/*.png), which can replace these tables in the final version."));
+add(H2("F. Case study: per-lot temporal logic (T3-01)"));
+add(P("The question asks for lots whose most recent germination rate is below 75%. The gold query returns 38 lots:"));
+add(CODE(["SELECT g.lot_id, g.germination_rate", "FROM GerminationTest g", "WHERE g.test_date = (SELECT MAX(g2.test_date) FROM GerminationTest g2", "                     WHERE g2.lot_id = g.lot_id)", "  AND g.germination_rate < 75;"]));
+add(P("A typical wrong query filters every test:"));
+add(CODE(["SELECT g.lot_id, g.germination_rate", "FROM GerminationTest g", "WHERE g.germination_rate < 75;"]));
+add(P("On the current database this executes and returns 64 rows covering 40 lots. Lots with several failed tests appear more than once, and two lots appear whose newer test passed, so the answer is wrong. Error-retry would accept it because it executes. Without the gold answer, the validator reports two findings:"));
+add(BUL("TEMP-LATEST (static rule): \"The question refers to the most recent germination result, but the SQL never selects the latest test per lot.\""));
+add(BUL("TEMP-LATEST (metamorphic test MR-LATEST): \"after adding a newer germination test of 90% for every lot of lot '1', the query still returned '1'. The answer should depend only on the latest test.\""));
+add(P("In VG-TextGrad these findings stop the loop from passing, and the gradient starts with \"[TEMP-LATEST] Select the most recent germination test separately for each lot before applying any threshold\", which the step folds into the prompt. A second mistake, taking the newest test of the whole table instead of each lot, returns a single row and is caught by TEMP-PERLOT. The two findings above are actual validator output on these queries. [Add a verbatim trace from records.jsonl after the LLM runs, including the actual loss, gradient and prompt diff.]"));
 
 // VIII
-add(H1("Worked Example: The “Latest Germination Test” Mistake"));
-add(P("Question T3-01 asks for lots whose most recent germination rate is below 75%. The gold query returns 38 lots:"));
-add(CODE(["SELECT g.lot_id, g.germination_rate", "FROM GerminationTest g", "WHERE g.test_date = (SELECT MAX(g2.test_date)", "        FROM GerminationTest g2", "        WHERE g2.lot_id = g.lot_id)", "  AND g.germination_rate < 75;"]));
-add(P0("A common wrong query, here produced by the drop-latest mutation, forgets the latest-test condition:"));
-add(CODE(["SELECT g.lot_id, g.germination_rate", "FROM GerminationTest g", "WHERE g.germination_rate < 75;"]));
-add(P("It runs without error and returns 64 rows covering 40 lots: every failed test of every lot, so lots repeat, and two lots appear whose newer tests passed. Execution feedback sees nothing wrong. The validator reports, without the gold answer:"));
-add(Item("–", "*Static (TEMP-LATEST):* “The question refers to the most recent germination result, but the SQL never selects the latest test per lot.”"));
-add(Item("–", "*Metamorphic (MR-LATEST):* “after adding a newer germination test of 90% for every lot of lot ‘1’, the query still returned ‘1’. The answer should depend only on the latest test.”"));
-add(P("In VG-TextGrad these findings block a PASS and become a gradient bullet beginning “[TEMP-LATEST]”, which the step LLM folds into the prompt. A second mutation, taking the newest test of the *whole table* instead of each lot, returns a single row and is caught by TEMP-PERLOT. These messages are actual validator output on injected mistakes; they are not traces of an LLM run."));
+add(H1("VIII. Discussion"));
+add(P("[Rewrite this section once the LLM results are in. The points below are the analyses the design supports, not findings.]"));
+add(lead("Where the validator should matter.", "Tier-3 temporal and domain questions need per-lot logic and combined conditions, which are the errors that execute silently. If VG-TextGrad helps, the gain over TextGrad should appear there, in the wrong-result category and in TRA, not in Tier 1."));
+add(lead("Validator vs loop.", "Validator-retry gives the same evidence without TextGrad. If it reaches the same accuracy at lower cost, the evidence matters more than the optimizer; if VG-TextGrad is better, the loss and gradient add value."));
+add(lead("Rules vs metamorphic tests.", "VG-TextGrad (static) removes the metamorphic tests. The offline results suggest the rules alone catch most injected mistakes on this benchmark, so the tests may matter mainly for mistakes the rules were not written for."));
+add(lead("Evaluator reliability.", "A false FAIL wastes iterations and can damage a correct query; a false PASS stops too early. The veto removes false PASS verdicts when the validator has a finding. Because gold is known offline, both rates can be measured from the traces."));
+add(lead("Cost.", "VG-TextGrad adds four calls per refinement and no calls for validation. The useful comparison is accuracy gained per additional call, against error-retry, validator-retry and few-shot."));
+add(lead("Transfer.", "Prompt-level mode with the rule memory tests whether lessons such as \"compute the latest test per lot\" improve later questions, or whether question-specific hints accumulate and hurt."));
 
 // IX
-add(H1("Limitations and Threats to Validity"));
-add(Item("1)", "**Simulated monitoring data.** Only the accessions are real; lots, tests, readings and distributions are simulated, and the thresholds are assumptions. Results show behaviour on realistic structure, not on real genebank operations."));
-add(Item("2)", "**Development-set validator figures.** The rules were tuned on the same 60 questions; a held-out question set is needed."));
-add(Item("3)", "**Small benchmark, one domain.** Sixty questions over one schema limit statistical power and generality; the paired tests and confidence intervals make this visible rather than remove it."));
-add(Item("4)", "**Relaxed matching can over-credit.** Ignoring extra columns can accept an answer with a surplus column. TRA reduces but does not remove such cases."));
-add(Item("5)", "**Rule coverage.** The validator only knows the error types it has rules and relations for; an unseen kind of mistake passes silently, and rule compliance is partly circular for the VG methods."));
-add(Item("6)", "**Model and provider.** Results will depend on the chosen model; the runner logs the model used and supports other providers for replication."));
+add(H1("IX. Limitations and Ethics"));
+add(BUL("Simulated monitoring data. Only the 66 accessions are real. Lots, tests, storage readings and distributions are simulated, and real records contain missing values and inconsistent naming that are not modelled."));
+add(BUL("Development-set validator figures. The rules and phrase lists were refined on the same 60 questions; a held-out question set is needed."));
+add(BUL("Small benchmark, one domain. Sixty questions on one schema limit statistical power, and findings may not transfer to other schemas."));
+add(BUL("Rule coverage. The validator only knows the mistakes it has rules and relations for. An unseen kind of mistake passes silently, and rule compliance is partly circular for the VG methods."));
+add(BUL("Relaxed matching. Ignoring extra columns can accept an answer with a surplus column; TRA reduces but does not remove such cases."));
+add(BUL("Assigned attributes and thresholds. Drought tolerance and crop type follow a crop-level rule, and the 75% retest threshold and storage limits are demonstration values, not official genebank standards [15]."));
+add(BUL("Author-written questions and model dependence. Questions and gold SQL were written by the authors, which may introduce bias, and providers retire models, so model identifiers and run dates are reported."));
+add(BUL("Ethics and safety. The system is decision support only and makes no agricultural decisions. Model-written SQL runs in a read-only sandbox. Genesys data are used under its terms of use [12], no personal data are involved, and the farmer-group names in the simulated distributions are invented."));
 
 // X
-add(H1("Ethics, Data Use and Reproducibility"));
-add(P("The system is decision support only and makes no agricultural decision. Model-written SQL runs in a read-only sandbox. Accession data come from Genesys and are used under its terms of use [18]; no personal data are involved, and farmer-group names in the simulated distributions are invented. The code, database builder, benchmark, rules, prompts and evaluation scripts are in the project repository (github.com/hemakowshik/seedbank-textgrad-sql). Every run stores each prompt, query, loss and gradient, so any reported number can be traced to its trace."));
-
-// XI
-add(H1("Conclusion and Future Work"));
-add(P("Seed-bank questions are easy to answer *almost* right. We combined TextGrad with a validator that needs no answer key: it reads the question’s intent, checks the SQL with domain and temporal rules, and tests its behaviour on controlled database changes. Offline, the validator raised no false alarms on 78 correct queries and flagged all 105 injected wrong-but-running mistakes on the development set, and five injected mistakes that matched the gold answer on the benchmark database were exposed by changed states. Next we will run the seven-method LLM comparison with repeated runs, write an independent held-out question set, measure how the rule memory transfers across questions, try several model sizes, and test the approach with practitioners and openly licensed monitoring records."));
+add(H1("X. Conclusion and Future Work"));
+add(P("We presented a TextGrad-guided Text-to-SQL pipeline for community seed-bank analytics in which the loss and the gradient are grounded in a validator that needs no reference answer. The validator reads the question's intent, checks the SQL with domain and temporal rules, and tests its behaviour on controlled changes to the data. On a benchmark of 60 questions over real ICRISAT accessions, it raised no false alarm on 78 correct queries and flagged all 105 injected wrong-but-running queries, and temporal robust accuracy exposed five wrong queries that ordinary execution accuracy would score as correct. [Add the one-sentence main LLM result.] Future work will run the seven-method comparison with repeated runs, write a held-out question set with seed-bank practitioners, compare several model sizes, measure evaluator accuracy directly, test whether the rule memory transfers across questions, and use openly licensed monitoring records where available."));
 
 // References
-add(new Paragraph({ children: [new TextRun({ text: "References", font: FONT, size: PT(10), smallCaps: true })], alignment: AlignmentType.CENTER, spacing: { before: 200, after: 80 }, keepNext: true }));
+add(H1("References"));
 const REFS = [
-  "Z. Hong, Z. Yuan, Q. Zhang, H. Chen, J. Dong, F. Huang, and X. Huang, “Next-generation database interfaces: A survey of LLM-based text-to-SQL,” arXiv:2406.08426, 2024.",
-  "T. Yu *et al.*, “Spider: A large-scale human-labeled dataset for complex and cross-domain semantic parsing and text-to-SQL task,” in *Proc. EMNLP*, 2018, pp. 3911–3921.",
-  "J. Li *et al.*, “Can LLM already serve as a database interface? A BIg bench for large-scale database grounded text-to-SQLs,” in *Proc. NeurIPS*, 2023.",
-  "L. Nan, Y. Zhao, W. Zou, N. Ri, J. Tae, E. Zhang, A. Cohan, and D. Radev, “Enhancing text-to-SQL capabilities of large language models: A study on prompt design strategies,” in *Findings of EMNLP*, 2023, pp. 14935–14956.",
-  "B. Wang *et al.*, “MAC-SQL: A multi-agent collaborative framework for text-to-SQL,” in *Proc. COLING*, 2025, pp. 540–557.",
-  "W. Mao, R. Wang, J. Guo, J. Zeng, C. Gao, P. Han, and C. Liu, “Enhancing text-to-SQL parsing through question rewriting and execution-guided refinement,” in *Findings of ACL*, 2024, pp. 2009–2024.",
-  "S. Piao, J. Lee, and S. Park, “LitE-SQL: A lightweight and efficient text-to-SQL framework with vector-based schema linking and execution-guided self-correction,” arXiv:2510.09014, 2025.",
-  "A. Jain and M. Shrivastava, “Reflect-SQL: A self-reflection based framework for text-to-SQL,” arXiv:2609.02944, 2026.",
-  "H. Zheng, Y. Gou, and W. Zhang, “ZAS-SQL: Distilling rules from failures for zero-shot text-to-SQL,” arXiv:2606.08245, 2026.",
-  "R. Pryzant, D. Iter, J. Li, Y. T. Lee, C. Zhu, and M. Zeng, “Automatic prompt optimization with “gradient descent” and beam search,” in *Proc. EMNLP*, 2023, pp. 7957–7968.",
-  "M. Yuksekgonul *et al.*, “Optimizing generative AI by backpropagating language model feedback,” *Nature*, vol. 639, no. 8055, pp. 609–616, 2025, doi: 10.1038/s41586-025-08661-4.",
-  "S. Gurajada, E. Kandogan, and S. Rahman, “Effectiveness of prompt optimization in NL2SQL systems,” arXiv:2505.20591, 2025, doi: 10.1145/3735079.3735325.",
-  "T. Y. Chen, S. C. Cheung, and S. M. Yiu, “Metamorphic testing: A new approach for generating next test cases,” Hong Kong Univ. Sci. Technol., Tech. Rep. HKUST-CS98-01, 1998.",
-  "S. Segura, G. Fraser, A. B. Sanchez, and A. Ruiz-Cortés, “A survey on metamorphic testing,” *IEEE Trans. Softw. Eng.*, vol. 42, no. 9, pp. 805–824, 2016.",
-  "M. Rigger and Z. Su, “Testing database engines via query partitioning,” *Proc. ACM Program. Lang.*, vol. 4, no. OOPSLA, 2020.",
-  "R. Zhong, T. Yu, and D. Klein, “Semantic evaluation for text-to-SQL with distilled test suites,” in *Proc. EMNLP*, 2020, pp. 396–411.",
-  "Y. Jia and M. Harman, “An analysis and survey of the development of mutation testing,” *IEEE Trans. Softw. Eng.*, vol. 37, no. 5, pp. 649–678, 2011.",
-  "Global Crop Diversity Trust, “Genesys: Plant genetic resources portal,” accession list of ICRISAT (IND002) and terms of use, https://www.genesys-pgr.org, accessed Nov. 2026.",
-  "USDA-ARS, “GRIN-Global: Germplasm Resource Information Network,” https://www.grin-global.org.",
-  "F. R. Hay *et al.*, “CGIAR genebank viability data reveal inconsistencies in seed collection management,” *Global Food Security*, vol. 30, art. 100557, 2021.",
-  "FAO, *Genebank Standards for Plant Genetic Resources for Food and Agriculture*. Rome, Italy: FAO, 2014.",
-  "Z. Zhang, J. Zhang, H. Liu, Q. Lv, J. Yang, K. Cai, and K. Wang, “AgriWorld: A world tools protocol framework for verifiable agricultural reasoning with code-executing LLM agents,” arXiv:2602.15325, 2026.",
-  "Q. McNemar, “Note on the sampling error of the difference between correlated proportions or percentages,” *Psychometrika*, vol. 12, no. 2, pp. 153–157, 1947.",
-  "E. B. Wilson, “Probable inference, the law of succession, and statistical inference,” *J. Amer. Statist. Assoc.*, vol. 22, no. 158, pp. 209–212, 1927.",
-  "S. Holm, “A simple sequentially rejective multiple test procedure,” *Scand. J. Statist.*, vol. 6, no. 2, pp. 65–70, 1979.",
-  "OpenAI, “gpt-oss-120b & gpt-oss-20b model card,” arXiv:2508.10925, 2025.",
+  ["Z. Hong, Z. Yuan, Q. Zhang, H. Chen, J. Dong, F. Huang, and X. Huang, \"Next-generation database interfaces: A survey of LLM-based text-to-SQL,\" arXiv:2406.08426, 2024.", "https://arxiv.org/abs/2406.08426"],
+  ["L. Nan, Y. Zhao, W. Zou, N. Ri, J. Tae, E. Zhang, A. Cohan, and D. Radev, \"Enhancing text-to-SQL capabilities of large language models: A study on prompt design strategies,\" in Findings of EMNLP, 2023, pp. 14935–14956.", "https://aclanthology.org/2023.findings-emnlp.996/"],
+  ["M. Yuksekgonul et al., \"Optimizing generative AI by backpropagating language model feedback,\" Nature, vol. 639, no. 8055, pp. 609–616, 2025. Preprint: \"TextGrad: Automatic 'differentiation' via text,\" arXiv:2406.07496.", "https://doi.org/10.1038/s41586-025-08661-4"],
+  ["B. Wang et al., \"MAC-SQL: A multi-agent collaborative framework for text-to-SQL,\" in Proc. COLING, 2025, pp. 540–557.", "https://aclanthology.org/2025.coling-main.36/"],
+  ["W. Mao, R. Wang, J. Guo, J. Zeng, C. Gao, P. Han, and C. Liu, \"Enhancing text-to-SQL parsing through question rewriting and execution-guided refinement,\" in Findings of ACL, 2024, pp. 2009–2024.", "https://aclanthology.org/2024.findings-acl.120/"],
+  ["S. Piao, J. Lee, and S. Park, \"LitE-SQL: A lightweight and efficient text-to-SQL framework with vector-based schema linking and execution-guided self-correction,\" arXiv:2510.09014, 2025.", "https://arxiv.org/abs/2510.09014"],
+  ["A. Jain and M. Shrivastava, \"Reflect-SQL: A self-reflection based framework for text-to-SQL,\" arXiv:2609.02944, 2026.", "https://arxiv.org/abs/2609.02944"],
+  ["R. Pryzant, D. Iter, J. Li, Y. T. Lee, C. Zhu, and M. Zeng, \"Automatic prompt optimization with 'gradient descent' and beam search,\" in Proc. EMNLP, 2023, pp. 7957–7968.", "https://aclanthology.org/2023.emnlp-main.494/"],
+  ["S. Gurajada, E. Kandogan, and S. Rahman, \"Effectiveness of prompt optimization in NL2SQL systems,\" arXiv:2505.20591, 2025.", "https://arxiv.org/abs/2505.20591"],
+  ["T. Yu et al., \"Spider: A large-scale human-labeled dataset for complex and cross-domain semantic parsing and text-to-SQL task,\" in Proc. EMNLP, 2018, pp. 3911–3921.", "https://aclanthology.org/D18-1425/"],
+  ["J. Li et al., \"Can LLM already serve as a database interface? A BIg bench for large-scale database grounded text-to-SQLs,\" in Proc. NeurIPS, 2023.", "https://arxiv.org/abs/2305.03111"],
+  ["Global Crop Diversity Trust, \"Genesys: Plant genetic resources portal,\" ICRISAT (IND002) accession list and terms of use, accessed Nov. 2026.", "https://www.genesys-pgr.org"],
+  ["USDA-ARS, \"GRIN-Global: Germplasm Resource Information Network.\"", "https://www.grin-global.org"],
+  ["F. R. Hay et al., \"CGIAR genebank viability data reveal inconsistencies in seed collection management,\" Global Food Security, vol. 30, art. 100557, 2021.", "https://doi.org/10.1016/j.gfs.2021.100557"],
+  ["FAO, Genebank Standards for Plant Genetic Resources for Food and Agriculture, rev. ed. Rome, 2014.", "http://www.fao.org/3/a-i3704e.pdf"],
+  ["H. Zheng, Y. Gou, and W. Zhang, \"ZAS-SQL: Distilling rules from failures for zero-shot text-to-SQL,\" arXiv:2606.08245, 2026.", "https://arxiv.org/abs/2606.08245"],
+  ["Z. Zhang, J. Zhang, H. Liu, Q. Lv, J. Yang, K. Cai, and K. Wang, \"AgriWorld: A world tools protocol framework for verifiable agricultural reasoning with code-executing LLM agents,\" arXiv:2602.15325, 2026.", "https://arxiv.org/abs/2602.15325"],
+  ["R. Zhong, T. Yu, and D. Klein, \"Semantic evaluation for text-to-SQL with distilled test suites,\" in Proc. EMNLP, 2020, pp. 396–411.", "https://aclanthology.org/2020.emnlp-main.29/"],
+  ["T. Y. Chen, S. C. Cheung, and S. M. Yiu, \"Metamorphic testing: A new approach for generating next test cases,\" Tech. Rep. HKUST-CS98-01, Hong Kong Univ. of Science and Technology, 1998.", null],
+  ["S. Segura, G. Fraser, A. B. Sanchez, and A. Ruiz-Cortés, \"A survey on metamorphic testing,\" IEEE Trans. Softw. Eng., vol. 42, no. 9, pp. 805–824, 2016.", null],
+  ["Y. Jia and M. Harman, \"An analysis and survey of the development of mutation testing,\" IEEE Trans. Softw. Eng., vol. 37, no. 5, pp. 649–678, 2011.", null],
+  ["Q. McNemar, \"Note on the sampling error of the difference between correlated proportions or percentages,\" Psychometrika, vol. 12, no. 2, pp. 153–157, 1947.", null],
+  ["OpenAI, \"gpt-oss-120b & gpt-oss-20b model card,\" arXiv:2508.10925, 2025.", "https://arxiv.org/abs/2508.10925"],
+  ["S. Holm, \"A simple sequentially rejective multiple test procedure,\" Scand. J. Statist., vol. 6, no. 2, pp. 65–70, 1979.", null],
 ];
-REFS.forEach((r, i) => add(new Paragraph({
-  children: [new TextRun({ text: `[${i + 1}]\t`, font: FONT, size: PT(8) }), ...runs(r, { size: PT(8) })],
-  indent: { left: 360, hanging: 360 }, tabStops: [{ type: TabStopType.LEFT, position: 360 }],
-  alignment: AlignmentType.JUSTIFIED, spacing: { before: 0, after: 20 } })));
+REFS.forEach(([t, u]) => {
+  add(new Paragraph({ numbering: { reference: "refs", level: 0 }, children: runs(t), spacing: { after: u ? 0 : 120, line: 280 } }));
+  if (u) add(new Paragraph({ children: [new TextRun({ text: u, font: FONT, color: INK })], indent: { left: 720 }, spacing: { after: 120 } }));
+});
 
-const page = { size: { width: 12240, height: 15840 }, margin: { top: 1080, bottom: 1440, left: 900, right: 900 } };
+// ============================================================================================ document
+const footer = new Footer({ children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [
+  new TextRun({ children: ["Page ", PageNumber.CURRENT, " of ", PageNumber.TOTAL_PAGES], font: FONT, size: 12, color: "6B6B6B" })] })] });
 const doc = new Document({
-  creator: "SeedSQL team", title: "Validation-Guided TextGrad for Seed-Bank Text-to-SQL",
-  styles: { default: { document: { run: { font: FONT, size: PT(10) } } } },
-  sections: [
-    { properties: { page }, children: title },
-    { properties: { page, type: SectionType.CONTINUOUS, column: { count: 2, space: 360, equalWidth: true } }, children: B },
-  ],
+  creator: "Gayathri Priya V, Gonu Guntla Hema Kowshik, Bhavin G Kamat",
+  title: "TextGrad-Guided Text-to-SQL for Community Seed-Bank Viability and Climate-Resilience Analytics",
+  styles: {
+    default: { document: { run: { font: FONT, size: 24, color: INK } } },
+    paragraphStyles: [
+      { id: "Heading1", name: "Heading 1", basedOn: "Normal", next: "Normal", quickFormat: true,
+        run: { font: FONT, size: 33, color: INK }, paragraph: { spacing: { before: 360, after: 120 }, keepNext: true, keepLines: true, outlineLevel: 0 } },
+      { id: "Heading2", name: "Heading 2", basedOn: "Normal", next: "Normal", quickFormat: true,
+        run: { font: FONT, size: 27, color: INK }, paragraph: { spacing: { before: 200, after: 120 }, keepNext: true, keepLines: true, outlineLevel: 1 } },
+    ],
+  },
+  numbering: { config: [
+    { reference: "num", levels: [{ level: 0, format: LevelFormat.DECIMAL, text: "%1.", alignment: AlignmentType.LEFT, style: { paragraph: { indent: { left: 720, hanging: 360 } } } }] },
+    { reference: "refs", levels: [{ level: 0, format: LevelFormat.DECIMAL, text: "%1.", alignment: AlignmentType.LEFT, style: { paragraph: { indent: { left: 720, hanging: 400 } } } }] },
+    { reference: "bul", levels: [{ level: 0, format: LevelFormat.BULLET, text: "•", alignment: AlignmentType.LEFT, style: { paragraph: { indent: { left: 720, hanging: 360 } } } }] },
+  ] },
+  sections: [{ properties: { page: { size: { width: 12240, height: 15840 }, margin: { top: 1009, right: 1082, bottom: 1183, left: 1080, header: 314, footer: 302 } } },
+    footers: { default: footer }, children: C }],
 });
 Packer.toBuffer(doc).then((b) => { fs.writeFileSync(process.argv[2] || "paper.docx", b); console.log("ok"); });

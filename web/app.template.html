@@ -156,6 +156,8 @@ svg text{font-family:var(--sans)}
         <button data-m="few">Few-shot</button>
         <button data-m="selfcorr">Error-retry (ablation)</button>
         <button data-m="textgrad" class="on">TextGrad</button>
+        <button data-m="vg_retry" class="vgonly hidden" title="Validator findings fed back without TextGrad (ablation)">Validator-retry</button>
+        <button data-m="vg_textgrad" class="vgonly hidden" title="Validation-guided TextGrad: domain rules + metamorphic temporal tests">VG-TextGrad ★</button>
       </div>
       <label>Max iterations <input type="number" id="maxit" min="1" max="8" value="4" style="width:60px"></label>
       <label>Model <select id="tier"><option value="quick">quick</option><option value="default" selected>default</option><option value="complex">complex</option></select></label>
@@ -192,6 +194,8 @@ svg text{font-family:var(--sans)}
       <label><input type="checkbox" class="bm" value="few" checked> Few-shot</label>
       <label><input type="checkbox" class="bm" value="selfcorr"> Error-retry (ablation)</label>
       <label><input type="checkbox" class="bm" value="textgrad" checked> TextGrad</label>
+      <label class="vgonly hidden"><input type="checkbox" class="bm" value="vg_retry"> Validator-retry (ablation)</label>
+      <label class="vgonly hidden"><input type="checkbox" class="bm" value="vg_textgrad" checked> VG-TextGrad ★</label>
     </div>
     <div class="controls">
       <span class="small muted">Tiers:</span>
@@ -280,6 +284,8 @@ ORDER BY l.quantity DESC LIMIT 10;</textarea>
         <tr><td>Few-shot</td><td>Same, plus 4 worked question→SQL examples (none of them in the test set).</td><td>1</td></tr>
         <tr><td>Error-retry (ablation)</td><td>Re-generates with the raw SQLite error appended, until the query executes. No evaluator, no gradients. It shows how much TextGrad adds beyond plain self-correction.</td><td>1–k</td></tr>
         <tr><td>TextGrad</td><td>Forward → loss → backward → TGD step, repeated.</td><td>2 per success, 4 per refinement</td></tr>
+        <tr><td>Validator-retry (ablation)</td><td>Gold-free validator findings fed straight back to the generator. No evaluator, no TextGrad.</td><td>1–k</td></tr>
+        <tr><td><b>VG-TextGrad ★</b></td><td>Proposed. A domain and temporal validator (configurable rules + intent-conditioned metamorphic tests on changed database states) grounds the loss, vetoes false PASS verdicts and produces typed, rule-tagged textual gradients. Needs <code>python app.py</code>.</td><td>2 + 4 per refinement</td></tr>
       </table>
     </div>
     <div class="card">
@@ -363,7 +369,8 @@ async function initLLM(){
         if(!r.ok) throw Object.assign(new Error(j.error||('HTTP '+r.status)),{code: r.status===429?'rate_limited':'error'});
         return {text:j.text};
       };
-      setPill('#st-llm','ok',`LLM: ${h.provider} · ${h.model}`);
+      setPill('#st-llm','ok',`LLM: ${h.provider} · ${h.model}${h.validator?' · validator on':''}`);
+      if(h.validator){ VALIDATOR=true; $$('.vgonly').forEach(e=>e.classList.remove('hidden')); }
       $$('#tier,#b-tier').forEach(s=>{s.disabled=true; s.title='Model is chosen when starting app.py';});
       return;
     }catch(e){ setPill('#st-llm','bad','LLM backend not reachable'); $('#llm-missing').classList.remove('hidden'); $('#llm-missing').textContent='Start the app with: python app.py --provider groq'; return; }
@@ -458,7 +465,7 @@ const SCHEMA_TEXT = BENCH.schema_text || `SeedVariety(variety_id INTEGER PK, cro
   -- drought_tolerance values: 'High','Medium','Low'
 SeedLot(lot_id INTEGER PK, variety_id INTEGER FK->SeedVariety.variety_id, storage_location TEXT, quantity INTEGER, collection_date TEXT)
   -- storage_location values: 'Cold Room A','Cold Room B','Clay Pot Store','Ambient Shelf','Village Hub - Mandya'
-  -- quantity = grams currently in stock (0 means exhausted)
+  -- quantity = grams currently in stock, already AFTER all distributions (0 means exhausted)
 GerminationTest(test_id INTEGER PK, lot_id INTEGER FK->SeedLot.lot_id, test_date TEXT, germination_rate REAL)
   -- germination_rate is a percentage 0-100; a lot can have several tests over time
 StorageLog(log_id INTEGER PK, lot_id INTEGER FK->SeedLot.lot_id, recorded_date TEXT, temperature REAL, humidity REAL)
@@ -552,6 +559,31 @@ ${scope}
 Keep everything in the current variable that is still useful, address the feedback, and keep it under 250 words. Do not include the database schema; it is supplied separately.
 Respond with the improved variable only, between <IMPROVED_VARIABLE> and </IMPROVED_VARIABLE>.`;
 }
+/* ---- validation-guided TextGrad prompts (identical to seedsql/prompts.py) ---- */
+function vgLossPrompt(question, sql, r, findingsText){
+  return lossPrompt(question, sql, r).replace("List concrete problems as short bullets",
+    "An automatic domain and temporal validator (no access to the correct answer) produced this evidence. "+
+    "Its metamorphic tests changed the database in a controlled way and re-ran the SQL; treat failed tests as "+
+    "strong evidence of a semantic error.\n<VALIDATION_FINDINGS>\n"+findingsText+"\n</VALIDATION_FINDINGS>\n"+
+    "List concrete problems as short bullets");
+}
+function vgGradientPrompt(instructions, question, sql, r, loss, findingsText, carry){
+  const scope = carry ? "Write each instruction as a general rule that will help on OTHER questions; never mention specific lot ids, accession names or values from the evidence."
+                      : "Instructions may be specific to this question.";
+  return gradientPrompt(instructions, question, sql, r, loss).replace("Explain how the VARIABLE should be changed",
+    "The domain and temporal validator found these errors (each is tagged with its rule id):\n<VALIDATION_FINDINGS>\n"+findingsText+"\n</VALIDATION_FINDINGS>\n\nExplain how the VARIABLE should be changed")
+    .replace("give the feedback only, as at most 6 bullets.",
+    "give the feedback only. Write one bullet per validated error, starting with its rule id in square brackets, e.g. '- [TEMP-LATEST] ...'. Add at most two further bullets for problems the evaluator found. "+scope);
+}
+function vgRetryPrompt(question, prevSQL, findingsText){
+  return generatorPrompt(BASE_INSTRUCTIONS, question, false) +
+    `\n\nYour previous query was:\n\`\`\`sql\n${prevSQL}\n\`\`\`\nAn automatic validator found these problems:\n${findingsText}\nWrite a corrected query.`;
+}
+let VALIDATOR=false;
+async function validateRemote(question, sql, seed){
+  const r = await fetch('/api/validate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question, sql, mode:'full', seed})});
+  const j = await r.json(); if(!r.ok) throw new Error(j.error||'validator failed'); return j;
+}
 function retryPrompt(question, prevSQL, r){
   return generatorPrompt(BASE_INSTRUCTIONS, question, false) +
     `\n\nYour previous query was:\n\`\`\`sql\n${prevSQL}\n\`\`\`\nIt failed with this SQLite error: ${r? r.error : 'no SQL produced'}\nWrite a corrected query.`;
@@ -632,6 +664,41 @@ async function runMethod(method, question, opts, hooks={}){
     }
     out.finalInstructions = instructions;
   }
+  else if(method==='vg_retry'){
+    let sql = extractSQL(await llm(generatorPrompt(BASE_INSTRUCTIONS, question, false), tier, signal));
+    for(let k=1;k<=maxIt;k++){
+      stage(3); const res = runSQL(sql); stage(4);
+      const v = await validateRemote(question, sql, k);
+      const it={k, prompt: k===1?BASE_INSTRUCTIONS:'(previous SQL + validator findings appended)', sql, res, validation:v,
+                verdict:(res.ok&&v.ok)?'PASS':'FAIL'};
+      out.iterations.push(it); hooks.onIter&&hooks.onIter(it);
+      if(it.verdict==='PASS' || k===maxIt) break;
+      stage(2); sql = extractSQL(await llm(vgRetryPrompt(question, sql, v.text), tier, signal));
+    }
+  }
+  else if(method==='vg_textgrad'){
+    let instructions = initialInstructions;
+    for(let k=1;k<=maxIt;k++){
+      stage(2);
+      const sql = extractSQL(await llm(generatorPrompt(instructions, question, false), tier, signal)); stage(3);
+      const res = runSQL(sql);
+      stage(4);
+      const v = await validateRemote(question, sql, k);
+      const loss = await llm(vgLossPrompt(question, sql, res, v.text), tier, signal);
+      const pass = res.ok && v.ok && /VERDICT:\s*PASS/i.test(loss) && !/VERDICT:\s*FAIL/i.test(loss);
+      const it={k, prompt:instructions, sql, res, loss, validation:v, verdict: pass?'PASS':'FAIL'};
+      if(pass || k===maxIt){ out.iterations.push(it); hooks.onIter&&hooks.onIter(it); break; }
+      stage(5);
+      it.gradient = await llm(vgGradientPrompt(instructions, question, sql, res, loss, v.text, carry), tier, signal);
+      const stepRaw = await llm(stepPrompt(instructions, it.gradient, carry), tier, signal);
+      const m = stepRaw.match(/<IMPROVED_VARIABLE>([\s\S]*?)<\/IMPROVED_VARIABLE>/i);
+      it.newPrompt = (m? m[1] : stepRaw).trim();
+      instructions = it.newPrompt;
+      out.iterations.push(it); hooks.onIter&&hooks.onIter(it);
+      stage(6);
+    }
+    out.finalInstructions = instructions;
+  }
   out.final = out.iterations[out.iterations.length-1];
   out.calls = CALLS - out.calls0;
   return out;
@@ -675,7 +742,13 @@ function iterHTML(it, method){
   let cells = `
     <div><div class="lbl"><span class="k fw">forward</span>Generated SQL</div><pre class="sqlc">${esc(it.sql||'(none)')}</pre></div>
     <div><div class="lbl"><span class="k ex">execute</span>Database result</div>${exec}</div>`;
-  if(it.loss) cells += `<div><div class="lbl"><span class="k loss">loss</span>${method==='textgrad'?'Evaluator critique':'Feedback'}</div><div class="prose">${esc(it.loss)}</div></div>`;
+  if(it.validation){
+    const v=it.validation, fs=v.findings||[];
+    cells += `<div style="grid-column:1/-1"><div class="lbl"><span class="k step">validator</span>Domain &amp; temporal validation (gold-free) · ${v.tests_run||0} metamorphic test(s) run</div>${fs.length?
+      `<table class="data"><tr><th>Category</th><th>Rule</th><th>Source</th><th style="white-space:normal">Evidence</th></tr>${fs.map(f=>`<tr><td>${esc(f.category)}</td><td>${esc(f.rule)}</td><td>${esc(f.source)}</td><td style="white-space:normal">${esc(f.evidence)}</td></tr>`).join('')}</table>`
+      : '<span class="badge ok">no rule violations; all metamorphic tests passed</span>'}</div>`;
+  }
+  if(it.loss && method!=='vg_retry') cells += `<div><div class="lbl"><span class="k loss">loss</span>${/textgrad/.test(method)?'Evaluator critique':'Feedback'}</div><div class="prose">${esc(it.loss)}</div></div>`;
   if(it.gradient) cells += `<div><div class="lbl"><span class="k grad">∇ gradient</span>Feedback on the prompt variable</div><div class="prose">${esc(it.gradient)}</div></div>`;
   if(it.newPrompt) cells += `<div style="grid-column:1/-1"><div class="lbl"><span class="k step">TGD step</span>Prompt update (green = added, red = removed)</div><div class="prose diff">${wordDiff(it.prompt,it.newPrompt)}</div></div>`;
   else if(method==='textgrad' && it.k===1) cells += `<div style="grid-column:1/-1"><div class="lbl">Prompt variable used</div><div class="prose">${esc(it.prompt)}</div></div>`;
@@ -695,7 +768,7 @@ $('#run').onclick = async ()=>{
       {onStage:setStage, onIter:it=>{ $('#trace').insertAdjacentHTML('beforeend', iterHTML(it, METHOD)); }});
     $$('#pipeline .stage').forEach(s=>{s.classList.remove('on');s.classList.add('done')});
     const f=out.final, secs=((performance.now()-t0)/1000).toFixed(1);
-    const label={zero:'Zero-shot',few:'Few-shot',selfcorr:'Error-retry',textgrad:'TextGrad'}[METHOD];
+    const label=MLABEL[METHOD];
     $('#final').innerHTML = `<h2>Answer <span class="small muted">· ${label} · ${out.iterations.length} iteration(s) · ${out.calls} LLM calls · ${secs}s</span></h2>
       ${f.res.ok? tableHTML(f.res) : `<pre class="err">${esc(f.res.error)}</pre>`}
       <details style="margin-top:10px"><summary class="small">Final SQL</summary><pre class="sqlc">${esc(f.sql)}</pre></details>
@@ -722,9 +795,9 @@ function alertMsg(m){ $('#trace').innerHTML=`<div class="notice red">${esc(m)}</
 /* ===================================================================== */
 /*  Benchmark                                                             */
 /* ===================================================================== */
-const METHODS=['zero','few','selfcorr','textgrad'];
-const MLABEL={zero:'Zero-shot',few:'Few-shot',selfcorr:'Error-retry',textgrad:'TextGrad'};
-const MCOLOR={zero:'#9aa5a0',few:'#2c5d8f',selfcorr:'#c9820a',textgrad:'#1f5c45'};
+const METHODS=['zero','few','selfcorr','textgrad','vg_retry','vg_textgrad'];
+const MLABEL={zero:'Zero-shot',few:'Few-shot',selfcorr:'Error-retry',textgrad:'TextGrad',vg_retry:'Validator-retry',vg_textgrad:'VG-TextGrad'};
+const MCOLOR={zero:'#9aa5a0',few:'#2c5d8f',selfcorr:'#c9820a',textgrad:'#5f9e83',vg_retry:'#d9a441',vg_textgrad:'#1f5c45'};
 let RESULTS={}; // key `${qid}|${method}` -> record
 try{ RESULTS = JSON.parse(localStorage.getItem('seedsql-results')||'{}') }catch(e){ RESULTS={} }
 function saveResults(){ try{ localStorage.setItem('seedsql-results', JSON.stringify(RESULTS)) }catch(e){} }
@@ -745,7 +818,7 @@ function record(q, out){
 
 $('#b-run').onclick = async ()=>{
   if(!SAMPLE){ $('#b-info').textContent='LLM unavailable in this view.'; return; }
-  const methods=$$('.bm:checked').map(x=>x.value), tiers=$$('.bt:checked').map(x=>+x.value);
+  const methods=$$('.bm:checked').map(x=>x.value).filter(m=>VALIDATOR||!m.startsWith('vg')), tiers=$$('.bt:checked').map(x=>+x.value);
   const qs=BENCH.questions.filter(q=>tiers.includes(q.tier));
   const tier=$('#b-tier').value, maxIt=+$('#b-maxit').value||4, carry=$('#b-carry').checked;
   const jobs=[]; methods.forEach(m=>qs.forEach(q=>jobs.push([q,m])));
@@ -819,7 +892,7 @@ function renderSummary(){
 function renderQTable(){
   let h=`<tr><th>ID</th><th>Tier</th><th style="white-space:normal">Question</th>${METHODS.map(m=>`<th style="text-align:center">${MLABEL[m]}</th>`).join('')}<th>Gold rows</th></tr>`;
   BENCH.questions.forEach(q=>{
-    h+=`<tr><td><b>${q.id}</b></td><td><span class="tier t${q.tier}">T${q.tier}</span></td><td style="white-space:normal;min-width:320px">${esc(q.question)}</td>`;
+    h+=`<tr><td><b>${q.id}</b></td><td><span class="tier t${q.tier}">T${q.tier}</span><br><span class="small muted">${esc(q.category||'')}</span></td><td style="white-space:normal;min-width:320px">${esc(q.question)}</td>`;
     METHODS.forEach(m=>{
       const key=q.id+'|'+m, r=RESULTS[key];
       let c='<span class="muted">·</span>';

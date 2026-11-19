@@ -20,7 +20,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
+from seedsql.db import SeedBankDB
 from seedsql.llm import LLM
+from seedsql.validator import format_findings, validate
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PAGE = os.path.join(HERE, "web", "index.html")
@@ -28,6 +30,8 @@ LOCK = threading.Lock()
 
 
 def make_handler(llm):
+    db = SeedBankDB()
+
     class Handler(BaseHTTPRequestHandler):
         def _send(self, code, body, ctype="application/json"):
             data = body if isinstance(body, bytes) else json.dumps(body).encode()
@@ -43,11 +47,21 @@ def make_handler(llm):
                 with open(PAGE, "rb") as f:
                     self._send(200, f.read(), "text/html; charset=utf-8")
             elif self.path == "/api/health":
-                self._send(200, {"provider": llm.provider, "model": llm.model})
+                self._send(200, {"provider": llm.provider, "model": llm.model, "validator": True})
             else:
                 self._send(404, {"error": "not found"})
 
         def do_POST(self):
+            if self.path == "/api/validate":   # gold-free domain/temporal validation of one query
+                try:
+                    n = int(self.headers.get("Content-Length", 0))
+                    body = json.loads(self.rfile.read(n) or b"{}")
+                    with LOCK:
+                        rep = validate(body.get("question", ""), body.get("sql", ""), db,
+                                       mode=body.get("mode", "full"), seed=int(body.get("seed", 0)))
+                    return self._send(200, rep.as_dict() | {"text": format_findings(rep), "ok": rep.ok})
+                except Exception as e:
+                    return self._send(500, {"error": str(e)})
             if self.path != "/api/llm":
                 return self._send(404, {"error": "not found"})
             try:

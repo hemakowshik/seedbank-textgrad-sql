@@ -76,13 +76,13 @@ const add = (...x) => x.flat().forEach((e) => C.push(e));
 
 add(new Paragraph({ children: [new TextRun({ text: "TextGrad-Guided Text-to-SQL for Community Seed-Bank Viability and Climate-Resilience Analytics", font: FONT, size: 48, color: INK })], spacing: { after: 160, line: 300, lineRule: "auto" } }));
 add(new Paragraph({ children: [new TextRun({ text: "Draft for review, not for submission. ", font: FONT, bold: true, color: INK }),
-  new TextRun({ text: "The LLM comparison (Section VII-E) is left blank until the benchmark runs are complete. All other numbers come from the current code and database.", font: FONT, color: INK })], spacing: { after: 150 } }));
+  new TextRun({ text: "Section VII-E reports a pilot LLM run on 8 questions; the full 60-question comparison is still to be run. All numbers come from the current code and database.", font: FONT, color: INK })], spacing: { after: 150 } }));
 add(new Paragraph({ children: [new TextRun({ text: "GAYATHRI PRIYA V, GONU GUNTLA HEMA KOWSHIK, BHAVIN G KAMAT", font: FONT, bold: true, color: INK })], spacing: { after: 44 } }));
 add(new Paragraph({ children: [new TextRun({ text: "Department of Computer Science and Engineering (AI & ML), PES University, Bengaluru, India", font: FONT, color: INK })], spacing: { after: 44 } }));
 add(new Paragraph({ children: [new TextRun({ text: "Guide: [Guide name]", font: FONT, color: INK })], spacing: { after: 500 } }));
 
 add(H1("Abstract"));
-add(P("Community seed banks keep records of seed lots, germination tests, storage conditions and distributions, but the staff who need answers from these records rarely write SQL. Large language models (LLMs) can translate questions into SQL, yet their queries often run without error and still return the wrong rows, for example by using every germination test when only a lot's most recent test matters. Execution feedback cannot see such errors, and in deployment there is no reference answer to compare with. We study TextGrad-guided prompt refinement for this domain and add a validator that needs no reference answer. The validator reads what the question asks for, checks the SQL against 13 configurable domain and temporal rules, and runs metamorphic tests: it makes a controlled change to an in-memory copy of the database, such as adding a newer passing test for a returned lot, and checks that the answer changes the way the question requires. Its findings are given to the TextGrad evaluator, block a PASS, and become gradients tagged with the rule that failed. We contribute a database built from 66 real ICRISAT accessions downloaded from Genesys with simulated monitoring records, a benchmark of 60 questions with hand-written gold SQL, temporal robust accuracy (a check of each answer on five changed database states), and a comparison of seven methods. Offline, the validator raised no false alarm on 78 correct queries and flagged all 105 injected wrong-but-running queries, although the rules were developed on the same questions. Five injected queries returned exactly the gold answer on the benchmark database but went wrong on changed states. [Main LLM finding to be added after the experiments.]"));
+add(P("Community seed banks keep records of seed lots, germination tests, storage conditions and distributions, but the staff who need answers from these records rarely write SQL. Large language models (LLMs) can translate questions into SQL, yet their queries often run without error and still return the wrong rows, for example by using every germination test when only a lot's most recent test matters. Execution feedback cannot see such errors, and in deployment there is no reference answer to compare with. We study TextGrad-guided prompt refinement for this domain and add a validator that needs no reference answer. The validator reads what the question asks for, checks the SQL against 13 configurable domain and temporal rules, and runs metamorphic tests: it makes a controlled change to an in-memory copy of the database, such as adding a newer passing test for a returned lot, and checks that the answer changes the way the question requires. Its findings are given to the TextGrad evaluator, block a PASS, and become gradients tagged with the rule that failed. We contribute a database built from 66 real ICRISAT accessions downloaded from Genesys with simulated monitoring records, a benchmark of 60 questions with hand-written gold SQL, temporal robust accuracy (a check of each answer on five changed database states), and a comparison of seven methods. Offline, the validator raised no false alarm on 78 correct queries and flagged all 105 injected wrong-but-running queries, although the rules were developed on the same questions. Five injected queries returned exactly the gold answer on the benchmark database but went wrong on changed states. In a pilot run with gpt-oss-20b on the eight hardest domain questions, all four methods tested reached 87.5% execution accuracy, because the model solved most questions on the first attempt; the full comparison on all 60 questions is still to be run."));
 add(new Paragraph({ children: [new TextRun({ text: "Index Terms: ", font: FONT, bold: true, color: INK }), ...runs("Text-to-SQL, large language models, TextGrad, prompt optimization, metamorphic testing, execution feedback, seed banks, genebanks.")], spacing: { after: 400 } }));
 
 // I
@@ -274,11 +274,11 @@ add(P("Execution errors are classified from SQLite messages as syntax error, unk
 add(H2("E. Evaluating the validator"));
 add(P("The validator is evaluated offline, without any LLM. False alarms are counted on the 60 gold queries and on 18 correct rewrites written in other SQL styles (window functions, common table expressions, NOT EXISTS, ORDER BY with LIMIT 1, conditional sums, strftime or BETWEEN for years, USING joins). Detection is measured by mutation testing [15]: 12 operators inject realistic mistakes into the gold queries, such as dropping the latest-test condition, taking the newest test of the whole table, using the earliest test, moving a threshold, turning OR into AND, subtracting distributions from the current stock, and joining on the wrong key. Only mutants that execute and return a different answer from gold are kept, because those are the mistakes that execution feedback would accept."));
 add(H2("F. Configuration and statistics"));
-add(P("All methods use the same model, temperature 0, database and iteration limit *K* = 4. [Report the provider, model identifier and run dates.] Each configuration is run R = 3 times to measure run-to-run variation, and we report the mean and standard deviation. Accuracies get 95% Wilson confidence intervals. Methods are compared on the same questions with the exact McNemar test [20] on paired correct/incorrect outcomes, with Holm's correction over ten planned comparisons. With 60 questions, one question is 1.7 percentage points overall, so small differences are not treated as conclusive."));
+add(P("All methods use the same model, temperature 0, database and iteration limit *K* = 4. The pilot run (Section VII-E) used openai/gpt-oss-20b on Groq on 19 November 2026. Each configuration is run R = 3 times to measure run-to-run variation, and we report the mean and standard deviation. Accuracies get 95% Wilson confidence intervals. Methods are compared on the same questions with the exact McNemar test [20] on paired correct/incorrect outcomes, with Holm's correction over ten planned comparisons. With 60 questions, one question is 1.7 percentage points overall, so small differences are not treated as conclusive."));
 
 // VII
 add(H1("VII. Results"));
-add(P("Sections A to D are offline results produced by eval_validator.py and eval_robustness.py; they need no LLM and can be reproduced exactly. Section E is the LLM comparison."));
+add(P("Sections A to D are offline results produced by eval_validator.py and eval_robustness.py; they need no LLM and can be reproduced exactly. Section E is a pilot LLM comparison."));
 add(H2("A. False alarms on correct queries"));
 add(P("A validator that flags correct queries would push TextGrad away from right answers. On the 60 gold queries and the 18 correct rewrites the validator produced no findings at all (0 false alarms out of 78)."));
 add(H2("B. Detection of wrong-but-running queries"));
@@ -323,30 +323,33 @@ add(TABLE([5600, 1600], [
   ["TEMP-NORETEST (…excludes retested lots)", "2"],
 ], { center: [1] }));
 add(AFTER());
-add(H2("E. LLM comparison"));
-add(P("Draft note: the tables below are templates. Fill every \"—\" from results/<run>/summary.md and stats.md produced by run_experiments.py with --repeats 3, report the mean over three runs with the standard deviation, and then write the findings paragraph. Do not report numbers from the mock provider or from the earlier run that failed with HTTP 403."));
-add(TCAP("Table X.", "Execution accuracy and temporal robust accuracy (%) by method"));
-add(TABLE([3000, 1000, 1000, 1000, 1200, 1200], [
-  ["Method", "Tier 1", "Tier 2", "Tier 3", "All (EX)", "All (TRA)"],
-  ...["Zero-shot", "Few-shot", "Error-retry", "TextGrad", "Validator-retry", "VG-TextGrad (static)", "VG-TextGrad"].map((m) => [m, "—", "—", "—", "—", "—"]),
+add(H2("E. Pilot LLM comparison"));
+add(P("The full comparison (60 questions, seven methods, three repeats) needs about 3,500 LLM calls, which is more than the free Groq plan allows in a day. We therefore ran a pilot on the eight Tier-3 domain questions with the four methods that answer the research question: Zero-shot, TextGrad, Validator-retry and VG-TextGrad. The run used openai/gpt-oss-20b on Groq on 19 November 2026, with one repeat, *K* = 4 and 52 LLM calls in total; no model switch occurred. Tables X and XI give the results exactly as written by run_experiments.py and analyze_results.py."));
+add(TCAP("Table X.", "Pilot results on the eight Tier-3 domain questions (gpt-oss-20b, one run)"));
+add(TABLE([2600, 1700, 1300, 1300, 1400, 1100], [
+  ["Method", "EX (%) [95% CI]", "TRA (%)", "First-attempt EX (%)", "Avg. iterations", "Avg. LLM calls"],
+  ["Zero-shot", "87.5 [52.9, 97.8]", "87.5", "87.5", "1.00", "1.0"],
+  ["TextGrad", "87.5 [52.9, 97.8]", "87.5", "75.0", "1.12", "2.5"],
+  ["Validator-retry", "87.5 [52.9, 97.8]", "87.5", "87.5", "1.00", "1.0"],
+  ["VG-TextGrad", "87.5 [52.9, 97.8]", "87.5", "87.5", "1.00", "2.0"],
 ], { center: [1, 2, 3, 4, 5] }));
 add(AFTER());
-add(P("[Findings: which method is best overall and per tier; whether VG-TextGrad's gain over TextGrad is concentrated in the temporal and domain questions; McNemar p-values for VG-TextGrad vs TextGrad, vs Validator-retry and vs VG-TextGrad (static).]"));
-add(TCAP("Table XI.", "Successful query rate, rule compliance, refinement effort and cost (all tiers)"));
-add(TABLE([3000, 1100, 1300, 1400, 1300, 1300], [
-  ["Method", "SQR (%)", "Rule comp. (%)", "First-attempt EX (%)", "Avg. iterations", "Avg. LLM calls"],
-  ["Zero-shot", "—", "—", "—", "1.00", "1.0"],
-  ["Few-shot", "—", "—", "—", "1.00", "1.0"],
-  ...["Error-retry", "TextGrad", "Validator-retry", "VG-TextGrad (static)", "VG-TextGrad"].map((m) => [m, "—", "—", "—", "—", "—"]),
-], { center: [1, 2, 3, 4, 5] }));
-add(AFTER());
-add(TCAP("Table XII.", "Questions by error category, first attempt → final answer"));
-add(TABLE([3000, 1500, 1500, 1500, 1500], [
-  ["Category", "Error-retry", "TextGrad", "Validator-retry", "VG-TextGrad"],
-  ...["Syntax error", "Unknown column / table", "Other execution error", "Wrong result", "Wrong result (empty)"].map((c) => [c, "— → —", "— → —", "— → —", "— → —"]),
+add(TCAP("Table XI.", "Per-question outcome in the pilot (✓ correct, ✗ runs but wrong; number of iterations in brackets when more than one)"));
+add(TABLE([1500, 1900, 1900, 1900, 1900], [
+  ["Question", "Zero-shot", "TextGrad", "Validator-retry", "VG-TextGrad"],
+  ["T3-02", "✓", "✓", "✓", "✓"],
+  ["DOM-02", "✓", "✓", "✓", "✓"],
+  ["DOM-03", "✓", "✓", "✓", "✓"],
+  ["DOM-04", "✓", "✓ (2)", "✓", "✓"],
+  ["DOM-08", "✓", "✓", "✓", "✓"],
+  ["DOM-10", "✓", "✓", "✓", "✓"],
+  ["DOM-11", "✗", "✗", "✗", "✗"],
+  ["DOM-12", "✓", "✓", "✓", "✓"],
 ], { center: [1, 2, 3, 4] }));
 add(AFTER());
-add(P("The key comparison is the wrong-result row. Error-retry cannot change a query that executes, so any reduction there comes from the evaluator, the validator, or both. The run folder also contains charts of accuracy by tier and by category and of error categories (charts/*.png), which can replace these tables in the final version."));
+add(P("All four methods reached the same execution accuracy, 7 of 8, and every query executed (successful query rate 100%). No paired difference exists, so every McNemar test gives p = 1.0. The pilot therefore shows no benefit of either TextGrad or the validator on these questions, mainly because the model already solved most of them on the first attempt. This ceiling effect is the first thing the full run has to check, using the larger temporal set and a smaller model."));
+add(P("Two observations are still useful. First, on DOM-04 TextGrad's first query took the highest germination rate of each lot (MAX(germination_rate)) instead of the most recent one; the evaluator's loss pointed this out and the second iteration was correct, at a cost of six calls. The other methods produced a correct query directly in this run, which also shows that outputs vary between runs even at temperature 0, so repeated runs are needed. Second, the one question every method missed, DOM-11, is not really a SQL error. It asks \"which crop names have more than 3000 grams of viable stock\"; all four methods returned exactly the right 11 crop names, but the gold query also returns the total grams, so relaxed matching counts the answer as wrong. The question wording should ask for the totals, or the gold query should return names only; we will fix this before the full run and report the change."));
+add(P("Rule compliance was 100% for all methods, because none of the final queries broke a rule. The validator therefore did not trigger any refinement in the pilot, and VG-TextGrad cost 2.0 calls per question against 2.5 for TextGrad."));
 add(H2("F. Case study: per-lot temporal logic (T3-01)"));
 add(P("The question asks for lots whose most recent germination rate is below 75%. The gold query returns 38 lots:"));
 add(CODE(["SELECT g.lot_id, g.germination_rate", "FROM GerminationTest g", "WHERE g.test_date = (SELECT MAX(g2.test_date) FROM GerminationTest g2", "                     WHERE g2.lot_id = g.lot_id)", "  AND g.germination_rate < 75;"]));
@@ -355,12 +358,13 @@ add(CODE(["SELECT g.lot_id, g.germination_rate", "FROM GerminationTest g", "WHER
 add(P("On the current database this executes and returns 64 rows covering 40 lots. Lots with several failed tests appear more than once, and two lots appear whose newer test passed, so the answer is wrong. Error-retry would accept it because it executes. Without the gold answer, the validator reports two findings:"));
 add(BUL("TEMP-LATEST (static rule): \"The question refers to the most recent germination result, but the SQL never selects the latest test per lot.\""));
 add(BUL("TEMP-LATEST (metamorphic test MR-LATEST): \"after adding a newer germination test of 90% for every lot of lot '1', the query still returned '1'. The answer should depend only on the latest test.\""));
-add(P("In VG-TextGrad these findings stop the loop from passing, and the gradient starts with \"[TEMP-LATEST] Select the most recent germination test separately for each lot before applying any threshold\", which the step folds into the prompt. A second mistake, taking the newest test of the whole table instead of each lot, returns a single row and is caught by TEMP-PERLOT. The two findings above are actual validator output on these queries. [Add a verbatim trace from records.jsonl after the LLM runs, including the actual loss, gradient and prompt diff.]"));
+add(P("In VG-TextGrad these findings stop the loop from passing, and the gradient starts with \"[TEMP-LATEST] Select the most recent germination test separately for each lot before applying any threshold\", which the step folds into the prompt. A second mistake, taking the newest test of the whole table instead of each lot, returns a single row and is caught by TEMP-PERLOT. The two findings above are actual validator output on these queries. In a live run of VG-TextGrad on the shorter question \"Which highly drought-tolerant varieties have viable stock available?\", the model's first query checked only drought tolerance and stock and returned 46 varieties. The validator reported TEMP-LATEST and DOM-THRESHOLD from its rules, and a metamorphic test failed: after a newer 60% test was added for variety 14, the query still returned it. The gradient produced one bullet per finding, the step added \"select the most recent germination test for each lot\" and \"apply the germination threshold of 75%\" to the prompt, and the second query returned 36 varieties, which matches the gold answer of T3-02. This took two iterations and six LLM calls. With the full wording of T3-02, which defines viable stock, all methods were correct on the first attempt in the pilot, so the validator matters most when the question leaves the domain rule unstated."));
 
 // VIII
 add(H1("VIII. Discussion"));
-add(P("[Rewrite this section once the LLM results are in. The points below are the analyses the design supports, not findings.]"));
+add(P("The pilot is small, so the points below are mostly analyses the design supports rather than findings. Where the pilot says something, we note it."));
 add(lead("Where the validator should matter.", "Tier-3 temporal and domain questions need per-lot logic and combined conditions, which are the errors that execute silently. If VG-TextGrad helps, the gain over TextGrad should appear there, in the wrong-result category and in TRA, not in Tier 1."));
+add(lead("Ceiling effect.", "In the pilot, gpt-oss-20b solved 7 of the 8 domain questions zero-shot, and the questions are worded carefully, with every rule stated. The live run above shows the opposite case: a shorter question without the definition of viable stock, where the first query was wrong and the validator fixed it. A smaller model, or questions phrased the way coordinators actually ask them, should leave more room for refinement."));
 add(lead("Validator vs loop.", "Validator-retry gives the same evidence without TextGrad. If it reaches the same accuracy at lower cost, the evidence matters more than the optimizer; if VG-TextGrad is better, the loss and gradient add value."));
 add(lead("Rules vs metamorphic tests.", "VG-TextGrad (static) removes the metamorphic tests. The offline results suggest the rules alone catch most injected mistakes on this benchmark, so the tests may matter mainly for mistakes the rules were not written for."));
 add(lead("Evaluator reliability.", "A false FAIL wastes iterations and can damage a correct query; a false PASS stops too early. The veto removes false PASS verdicts when the validator has a finding. Because gold is known offline, both rates can be measured from the traces."));
@@ -380,7 +384,7 @@ add(BUL("Ethics and safety. The system is decision support only and makes no agr
 
 // X
 add(H1("X. Conclusion and Future Work"));
-add(P("We presented a TextGrad-guided Text-to-SQL pipeline for community seed-bank analytics in which the loss and the gradient are grounded in a validator that needs no reference answer. The validator reads the question's intent, checks the SQL with domain and temporal rules, and tests its behaviour on controlled changes to the data. On a benchmark of 60 questions over real ICRISAT accessions, it raised no false alarm on 78 correct queries and flagged all 105 injected wrong-but-running queries, and temporal robust accuracy exposed five wrong queries that ordinary execution accuracy would score as correct. [Add the one-sentence main LLM result.] Future work will run the seven-method comparison with repeated runs, write a held-out question set with seed-bank practitioners, compare several model sizes, measure evaluator accuracy directly, test whether the rule memory transfers across questions, and use openly licensed monitoring records where available."));
+add(P("We presented a TextGrad-guided Text-to-SQL pipeline for community seed-bank analytics in which the loss and the gradient are grounded in a validator that needs no reference answer. The validator reads the question's intent, checks the SQL with domain and temporal rules, and tests its behaviour on controlled changes to the data. On a benchmark of 60 questions over real ICRISAT accessions, it raised no false alarm on 78 correct queries and flagged all 105 injected wrong-but-running queries, and temporal robust accuracy exposed five wrong queries that ordinary execution accuracy would score as correct. In a pilot run on eight domain questions, all methods reached 87.5% execution accuracy, so the benefit of the validator in the LLM loop is still to be shown on the full benchmark. Future work will run the seven-method comparison with repeated runs, write a held-out question set with seed-bank practitioners, compare several model sizes, measure evaluator accuracy directly, test whether the rule memory transfers across questions, and use openly licensed monitoring records where available."));
 
 // References
 add(H1("References"));

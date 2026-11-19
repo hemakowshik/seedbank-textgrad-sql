@@ -1,0 +1,13 @@
+method,tier,n,execution_accuracy,temporal_robust_accuracy,rule_compliance,successful_query_rate,avg_iterations,avg_llm_calls,first_attempt_accuracy,errors_first,errors_final
+Zero-shot,all,8,87.5,87.5,100.0,100.0,1,1,87.5,1,1
+Zero-shot,3,8,87.5,87.5,100.0,100.0,1,1,87.5,1,1
+Zero-shot,cat:domain,8,87.5,87.5,100.0,100.0,1,1,87.5,1,1
+TextGrad,all,8,87.5,87.5,100.0,100.0,1.12,2.5,75.0,2,1
+TextGrad,3,8,87.5,87.5,100.0,100.0,1.12,2.5,75.0,2,1
+TextGrad,cat:domain,8,87.5,87.5,100.0,100.0,1.12,2.5,75.0,2,1
+Validator-retry,all,8,87.5,87.5,100.0,100.0,1,1,87.5,1,1
+Validator-retry,3,8,87.5,87.5,100.0,100.0,1,1,87.5,1,1
+Validator-retry,cat:domain,8,87.5,87.5,100.0,100.0,1,1,87.5,1,1
+VG-TextGrad,all,8,87.5,87.5,100.0,100.0,1,2,87.5,1,1
+VG-TextGrad,3,8,87.5,87.5,100.0,100.0,1,2,87.5,1,1
+VG-TextGrad,cat:domain,8,87.5,87.5,100.0,100.0,1,2,87.5,1,1

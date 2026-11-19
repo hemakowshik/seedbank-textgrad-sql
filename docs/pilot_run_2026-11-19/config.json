@@ -1,0 +1,32 @@
+{
+  "provider": "groq",
+  "model": null,
+  "base_url": null,
+  "methods": [
+    "zero",
+    "textgrad",
+    "vg_retry",
+    "vg_textgrad"
+  ],
+  "categories": [
+    "domain"
+  ],
+  "states": 5,
+  "tiers": [
+    3
+  ],
+  "max_iters": 4,
+  "carry": false,
+  "repeats": 1,
+  "temperature": 0.0,
+  "min_interval": 12.0,
+  "out": "results",
+  "model_resolved": "openai/gpt-oss-20b",
+  "n_questions": 8,
+  "model_final": "openai/gpt-oss-20b",
+  "model_switches": [],
+  "models_used": [
+    "openai/gpt-oss-20b"
+  ],
+  "llm_calls_total": 52
+}
